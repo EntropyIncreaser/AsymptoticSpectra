@@ -14,8 +14,6 @@ example (a b c d : R) : a ≤ b → c ≤ d → a + c ≤ b + d := add_le_add
 example {m n : ℕ} : (m : R) ≤ n ↔ m ≤ n := Nat.cast_le
 example : ℕ ↪o R := Nat.castOrderEmbedding
 
--- lemma StrassenOrderedCommSemiring.mul_le_mul (a b c d : R) : (h₁ : a ≤ b) → (h₂ : c ≤ d) → a * c ≤ b * d := sorry
-
 namespace StrassenOrderedCommSemiring
 
 theorem all_nonneg (a : R) : 0 ≤ a := by {
