@@ -5,6 +5,7 @@ import Mathlib.Analysis.Subadditive
 noncomputable section
 open Set Filter Topology
 
+/-- A sequence u : ℕ → ℝ is submultiplicative if u(m + n) ≤ u(m) * u(n) for all m, n. -/
 def IsSubmultiplicative (u : ℕ → ℝ) : Prop :=
   ∀ m n, u (m + n) ≤ u m * u n
 
@@ -12,9 +13,11 @@ namespace IsSubmultiplicative
 
 variable {u : ℕ → ℝ} (h : IsSubmultiplicative u) (h1 : ∀ n, 1 ≤ u n)
 
+/-- The limit guaranteed by Fekete's Lemma for submultiplicative sequences. -/
 def lim (_h : IsSubmultiplicative u) :=
   sInf ((fun n : ℕ => (u n) ^ (1 / (n : ℝ))) '' Ici 1)
 
+/-- Fekete's Lemma for submultiplicative sequences: the normalized sequence tends to its infimum. -/
 theorem tends_to_lim :
   Tendsto (fun n => (u n) ^ (1 / (n : ℝ))) atTop (𝓝 h.lim) := by
   have pos_u : ∀ n, 0 < u n := fun n => zero_lt_one.trans_le (h1 n)
