@@ -45,7 +45,7 @@ instance (P : StrassenPreorder R) : TopologicalSpace (AsymptoticSpectrumPoint R 
   TopologicalSpace.induced (fun f => (f : R → ℝ)) Pi.topologicalSpace
 
 theorem continuous_eval (P : StrassenPreorder R) (a : R) :
-  Continuous (fun (phi : AsymptoticSpectrumPoint R P) => phi a) :=
+  Continuous (fun (ϕ : AsymptoticSpectrumPoint R P) => ϕ a) :=
   continuous_pi_iff.mp continuous_induced_dom a
 
 /-- The asymptotic spectrum is a compact Hausdorff space. -/
