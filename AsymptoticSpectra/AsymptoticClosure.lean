@@ -1,12 +1,13 @@
 import AsymptoticSpectra.Structures
 import Mathlib.Topology.Basic
 import Mathlib.Analysis.SpecialFunctions.Pow.Real
-import Mathlib.Algebra.GroupPower.Order
+import Mathlib.Algebra.Order.Monoid.Unbundled.Pow
+-- import Mathlib.Algebra.GroupPower.Order
 import Mathlib.Data.Finset.Basic
-import Mathlib.Data.Finset.Lattice
+import Mathlib.Data.Finset.Lattice.Fold
 import Mathlib.Analysis.SpecificLimits.Basic
-import Mathlib.Algebra.BigOperators.Basic
-import Mathlib.Algebra.BigOperators.Order
+import Mathlib.Algebra.BigOperators.Group.Finset.Basic
+-- import Mathlib.Algebra.BigOperators.Order
 import Mathlib.Data.Nat.Choose.Basic
 import Mathlib.Data.Nat.Choose.Cast
 
@@ -41,14 +42,14 @@ lemma isSubexponential_iff_exists_constant {f : ℕ → ℕ} :
         rw [dif_pos hS]
         exact S.le_max' _ h_mem
       have h_pos : 0 < (1 + ε) ^ (n : ℝ) := Real.rpow_pos_of_pos (by linarith) _
-      exact (div_le_iff h_pos).mp this
+      exact (div_le_iff₀ h_pos).mp this
     · have h_ge : n ≥ N := not_lt.mp hn
       specialize hN n h_ge
       apply hN.trans
       have h1 : 0 ≤ 1 + ε / 2 := by linarith
       have h2 : 1 + ε / 2 ≤ 1 + ε := by linarith
       apply (Real.rpow_le_rpow h1 h2 (Nat.cast_nonneg n)).trans
-      apply le_mul_of_one_le_left (Real.rpow_nonneg_of_nonneg (by linarith) _) (le_max_left _ _)
+      apply le_mul_of_one_le_left (Real.rpow_nonneg (by linarith) _) (le_max_left _ _)
   · intro h ε hε
     have h_lt : (1 + ε / 2) < (1 + ε) := by linarith
     specialize h (ε / 2) (half_pos hε)
@@ -59,7 +60,7 @@ lemma isSubexponential_iff_exists_constant {f : ℕ → ℕ} :
     have h_lim : Tendsto (fun n : ℕ => C * ((1 + ε / 2) / (1 + ε)) ^ n) atTop (𝓝 0) := by
       rw [← mul_zero C]
       apply Tendsto.const_mul
-      apply _root_.tendsto_pow_atTop_nhds_0_of_lt_1 h_ratio_pos h_ratio
+      apply tendsto_pow_atTop_nhds_zero_of_lt_one h_ratio_pos h_ratio
     specialize h_lim (eventually_le_nhds (zero_lt_one' ℝ))
     filter_upwards [h_lim] with n hn
     specialize hC n
@@ -67,18 +68,21 @@ lemma isSubexponential_iff_exists_constant {f : ℕ → ℕ} :
     have h_pos : 0 < (1 + ε) ^ (n : ℝ) := Real.rpow_pos_of_pos (by linarith) _
     have h_le : C * ((1 + ε / 2) / (1 + ε)) ^ n ≤ 1 := hn
     have := mul_le_mul_of_nonneg_right h_le (le_of_lt h_pos)
-    rw [← Real.rpow_nat_cast, Real.div_rpow (by linarith) (by linarith),
-        mul_assoc, div_mul_cancel _ (ne_of_gt h_pos), one_mul] at this
+    rw [← Real.rpow_natCast, Real.div_rpow (by linarith) (by linarith),
+        mul_assoc, div_mul_cancel₀ _ (ne_of_gt h_pos), one_mul] at this
     exact this
 
 lemma IsSubexponential.const_one : IsSubexponential (fun _ => 1) := by
   intro ε hε
-  apply eventually_atTop.mpr
-  use 0
-  intro n _
+  apply Eventually.of_forall
+  intro n
   simp
-  apply one_le_pow_of_one_le
-  linarith
+  have h1 : 1 ≤ 1 + ε := by linarith
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [pow_succ]
+    exact one_le_mul_of_one_le_of_one_le ih h1
 
 lemma IsSubexponential.mul {f g : ℕ → ℕ} (hf : IsSubexponential f) (hg : IsSubexponential g) :
     IsSubexponential (fun n => f n * g n) := by
@@ -94,7 +98,7 @@ lemma IsSubexponential.mul {f g : ℕ → ℕ} (hf : IsSubexponential f) (hg : I
   have h_prod : ((f n * g n : ℕ) : ℝ) = (f n : ℝ) * (g n : ℝ) := by norm_cast
   rw [h_prod]
   have h_bound : (f n : ℝ) * (g n : ℝ) ≤ (1 + η) ^ (n : ℝ) * (1 + η) ^ (n : ℝ) :=
-    mul_le_mul hfn hgn (Nat.cast_nonneg _) (Real.rpow_nonneg_of_nonneg (by linarith) _)
+    mul_le_mul hfn hgn (Nat.cast_nonneg _) (Real.rpow_nonneg (by linarith) _)
   apply h_bound.trans
   rw [← Real.mul_rpow (by linarith) (by linarith)]
   have h_sqrt : (1 + η) * (1 + η) = 1 + ε := by
@@ -114,11 +118,11 @@ lemma IsSubexponential.sup_prefix {f : ℕ → ℕ} (hf : IsSubexponential f) :
   obtain ⟨k, hk, h_sup⟩ := (range (n + 1)).exists_mem_eq_sup (nonempty_range_iff.mpr (Nat.succ_ne_zero n)) f
   rw [h_sup]
   apply (hC k).trans
-  apply (mul_le_mul_of_nonneg_right (le_max_left _ _) (Real.rpow_nonneg_of_nonneg (by linarith) _)).trans
+  apply (mul_le_mul_of_nonneg_right (le_max_left _ _) (Real.rpow_nonneg (by linarith) _)).trans
   apply mul_le_mul_of_nonneg_left
   · apply Real.rpow_le_rpow_of_exponent_le
     · linarith
-    · simp at hk; exact_mod_cast (Nat.lt_succ_iff.mp hk)
+    · simp at hk; exact_mod_cast hk
   · exact le_max_right _ _
 
 /-- The asymptotic preorder on R with respect to a Strassen preorder P. -/
@@ -138,7 +142,7 @@ lemma AsymptoticLe.of_le (P : StrassenPreorder R) {a b : R} (h : P.le a b) : Asy
       rw [pow_zero, pow_zero]
       exact P.le_refl _
     | succ n ih =>
-      rw [pow_succ', pow_succ']
+      rw [pow_succ, pow_succ]
       have h1 := P.mul_right _ _ ih a
       have h2 := P.mul_right _ _ h (b ^ n)
       rw [mul_comm b (b ^ n), mul_comm a (b ^ n)] at h2
@@ -188,10 +192,10 @@ lemma AsymptoticLe.nat_order_embedding (P : StrassenPreorder R) (n m : ℕ) :
       filter_upwards [hf] with k hk
       specialize h_nat k
       have h_nat_real : (n : ℝ) ^ (k : ℝ) ≤ (f k : ℝ) * (m : ℝ) ^ (k : ℝ) := by
-        rw [Real.rpow_nat_cast, Real.rpow_nat_cast]
+        rw [Real.rpow_natCast, Real.rpow_natCast]
         exact_mod_cast h_nat
       have h_pow_pos : 0 < (m : ℝ) ^ (k : ℝ) := Real.rpow_pos_of_pos (by exact_mod_cast hm_pos) _
-      rw [← div_le_iff h_pow_pos] at h_nat_real
+      rw [← div_le_iff₀ h_pow_pos] at h_nat_real
       rw [← Real.div_rpow (Nat.cast_nonneg n) (Nat.cast_nonneg m)] at h_nat_real
       have : (n : ℝ) / (m : ℝ) = 1 + δ := by
         simp [δ]
@@ -206,31 +210,32 @@ lemma AsymptoticLe.nat_order_embedding (P : StrassenPreorder R) (n m : ℕ) :
       · norm_num
       · exact (half_pos hδ).le
     have h2 : 1 + δ / 2 < 1 + δ := by
-      apply add_lt_add_left
-      exact half_lt_self hδ
+      linarith
     have h_pos : 0 < (k : ℝ) := by
       apply lt_of_lt_of_le (zero_lt_one' ℝ)
       exact_mod_cast (Nat.le_max_right N 1)
     have h_lt := Real.rpow_lt_rpow h1 h2 h_pos
-    exact hN_f.not_lt h_lt
+    exact not_lt_of_ge hN_f h_lt
   · intro h
     use fun _ => 1
-    refine ⟨IsSubexponential.const_one, fun k => ?_⟩
-    rw [Nat.cast_one, one_mul]
-    rw [← Nat.cast_pow, ← Nat.cast_pow, P.nat_order_embedding]
-    exact Nat.pow_le_pow_of_le_left h k
+    constructor
+    · exact IsSubexponential.const_one
+    · intro k
+      rw [Nat.cast_one, one_mul]
+      rw [← Nat.cast_pow, ← Nat.cast_pow, P.nat_order_embedding]
+      exact Nat.pow_le_pow_left h k
 
 lemma sum_le_sum_P {s : Finset ℕ} {f g : ℕ → R} (P : StrassenPreorder R)
-    (h : ∀ i ∈ s, P.le (f i) (g i)) : P.le (∑ i in s, f i) (∑ i in s, g i) := by
+    (h : ∀ i ∈ s, P.le (f i) (g i)) : P.le (Finset.sum s f) (Finset.sum s g) := by
   revert h
-  refine Finset.induction (p := fun s => (∀ i ∈ s, P.le (f i) (g i)) → P.le (∑ i in s, f i) (∑ i in s, g i)) ?_ ?_ s
-  · intro _; simp; exact P.le_refl _
-  · intro a s has ih h_all
+  refine Finset.induction_on s (fun _ => P.le_refl _) fun a s has ih h => by
     rw [sum_insert has, sum_insert has]
-    apply P.le_trans _ (f a + ∑ i in s, g i)
-    · rw [add_comm (f a), add_comm (f a)]
-      apply P.add_right _ _ (ih (fun i hi => h_all i (mem_insert_of_mem hi))) (f a)
-    · apply P.add_right (f a) (g a) (h_all a (mem_insert_self a s)) (∑ i in s, g i)
+    have h1 : P.le (f a + Finset.sum s f) (f a + Finset.sum s g) := by
+      rw [add_comm (f a), add_comm (f a)]
+      apply P.add_right _ _ (ih (fun i hi => h i (mem_insert_of_mem hi))) (f a)
+    have h2 : P.le (f a + Finset.sum s g) (g a + Finset.sum s g) := by
+      apply P.add_right (f a) (g a) (h a (mem_insert_self a s)) (Finset.sum s g)
+    exact P.le_trans _ _ _ h1 h2
 
 namespace StrassenPreorder
 
@@ -253,7 +258,7 @@ def asymptoticClosure (P : StrassenPreorder R) : StrassenPreorder R where
       apply sum_le_sum_P P
       intro i hi
       simp at hi
-      have h_f_le : f i ≤ F n := Finset.le_sup (mem_range.mpr hi)
+      have h_f_le : f i ≤ F n := Finset.le_sup (mem_range.mpr (Nat.lt_succ_of_le hi))
       have h_f_cast : P.le (f i : R) (F n : R) := (P.nat_order_embedding (f i) (F n)).mpr h_f_le
       have h_ai_bi := hle i
       have h1 := P.mul_right _ _ h_ai_bi (c^(n-i))

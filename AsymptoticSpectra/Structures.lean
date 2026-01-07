@@ -49,10 +49,10 @@ def activate (P : StrassenPreorder α) (f : [Preorder α] → [CovariantClass α
   letI : CovariantClass α α (· + ·) (· ≤ ·) := ⟨fun a _ _ bc ↦ by
     rw [add_comm a, add_comm a]
     exact P.add_right _ _ bc a⟩
-  letI : PosMulMono α := ⟨fun x _ _ h ↦ by
-    rw [mul_comm x.1, mul_comm x.1]
-    exact P.mul_right _ _ h x.1⟩
-  letI : MulPosMono α := ⟨fun x _ _ h ↦ P.mul_right _ _ h x.1⟩
+  letI : PosMulMono α := ⟨fun x _ _ _ h ↦ by
+    rw [mul_comm x, mul_comm x]
+    exact P.mul_right _ _ h x⟩
+  letI : MulPosMono α := ⟨fun x _ _ _ h ↦ P.mul_right _ _ h x⟩
   f
 
 instance (P : StrassenPreorder α) : CharZero α where

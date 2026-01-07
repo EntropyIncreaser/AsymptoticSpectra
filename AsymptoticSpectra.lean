@@ -1,10 +1,10 @@
-import Mathlib.Data.Nat.Cast.Order
-import Mathlib.Algebra.GroupPower.Order
+import Mathlib.Data.Nat.Cast.Order.Basic
+-- import Mathlib.Algebra.GroupPower.Order
 import Mathlib.Topology.Basic
 import Mathlib.Topology.Compactness.Compact
-import Mathlib.Topology.Separation
+import Mathlib.Topology.Separation.Hausdorff
 import Mathlib.Analysis.SpecialFunctions.Pow.Real
-import Mathlib.Algebra.Ring.Hom.Basic
+import Mathlib.Algebra.Ring.Hom.Defs
 import Mathlib.Order.Monotone.Basic
 import AsymptoticSpectra.Submultiplicative
 import AsymptoticSpectra.Structures
@@ -26,13 +26,13 @@ abbrev AsymptoticSpectrum (R : Type u) [CommSemiring R] (P : StrassenPreorder R)
 
 variable {R : Type u} [CommSemiring R]
 
-instance (P : StrassenPreorder R) : FunLike (AsymptoticSpectrumPoint R P) R (fun _ => ℝ) where
+instance (P : StrassenPreorder R) : FunLike (AsymptoticSpectrumPoint R P) R ℝ where
   coe f := f.toRingHom.toFun
   coe_injective' f g h := by
     obtain ⟨f_hom, f_mono⟩ := f
     obtain ⟨g_hom, g_mono⟩ := g
     congr
-    exact FunLike.coe_injective h
+    exact DFunLike.coe_injective h
 
 instance (P : StrassenPreorder R) : RingHomClass (AsymptoticSpectrumPoint R P) R ℝ where
   map_add f := f.toRingHom.map_add'
@@ -90,7 +90,7 @@ theorem rank_one (P : StrassenPreorder R) : rank P 1 = 1 := by
       have h_spec := Nat.find_spec (P.upper_archimedean (1 : R))
       dsimp [rank] at h_rank
       rw [h_rank] at h_spec
-      simp [P.nat_order_embedding] at h_spec
+      simp at h_spec
       exact h_pos_nle h_spec
     exact Nat.succ_le_of_lt (Nat.pos_of_ne_zero this)
 
@@ -111,7 +111,7 @@ theorem rank_pow_ge_one (P : StrassenPreorder R) (a : R) (ha : a ≠ 0) (n : ℕ
       induction n with
       | zero => simp
       | succ n ih =>
-        rw [pow_succ]
+        rw [pow_succ, mul_comm]
         exact P.le_trans 1 a (a * a ^ n) h (by rw [mul_comm a]; simpa using P.mul_right 1 (a ^ n) ih a)
     have h_rank := rank_monotone P 1 (a ^ n) h'
     rw [rank_one P] at h_rank

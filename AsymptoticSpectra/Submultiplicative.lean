@@ -1,4 +1,4 @@
-import Mathlib.Topology.Instances.Real
+import Mathlib.Topology.Instances.Real.Lemmas
 import Mathlib.Analysis.SpecialFunctions.Pow.Continuity
 import Mathlib.Analysis.SpecialFunctions.Exp
 import Mathlib.Analysis.Subadditive
@@ -18,7 +18,7 @@ def lim (_h : IsSubmultiplicative u) :=
   sInf ((fun n : ℕ => (u n) ^ (1 / (n : ℝ))) '' Ici 1)
 
 /-- Fekete's Lemma for submultiplicative sequences: the normalized sequence tends to its infimum. -/
-theorem tends_to_lim :
+theorem tends_to_lim (h1 : ∀ n, 1 ≤ u n) :
   Tendsto (fun n => (u n) ^ (1 / (n : ℝ))) atTop (𝓝 h.lim) := by
   have pos_u : ∀ n, 0 < u n := fun n => zero_lt_one.trans_le (h1 n)
 
@@ -27,8 +27,7 @@ theorem tends_to_lim :
     intro m n
     dsimp [v]
     rw [← Real.log_mul (pos_u m).ne' (pos_u n).ne']
-    apply (Real.log_le_log (pos_u (m + n)) (mul_pos (pos_u m) (pos_u n))).mpr
-    exact h m n
+    apply Real.log_le_log (pos_u (m + n)) (h m n)
   have hbdd : BddBelow (range fun n => v n / n) := by
     use 0
     rintro _ ⟨n, rfl⟩
@@ -44,7 +43,7 @@ theorem tends_to_lim :
 
   -- Exponentiate
   have hexp : Tendsto (fun n => Real.exp (v n / n)) atTop (𝓝 (Real.exp hv.lim)) :=
-    hlim.exp
+    (Real.continuous_exp.tendsto hv.lim).comp hlim
 
   have eq_exp : ∀ n, n ≠ 0 → Real.exp (v n / n) = (u n) ^ (1 / (n : ℝ)) := by
     intro n _hn
