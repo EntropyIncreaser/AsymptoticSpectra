@@ -15,33 +15,15 @@ variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
 def Restrict (X Y : TensorObj K d) : Prop :=
   ∃ f : ∀ i, Y.V i →ₗ[K] X.V i, liftMap f Y.t = X.t
 
-/-- Functoriality: identity map. -/
-theorem liftMap_id (X : TensorObj K d) : liftMap (fun _ => LinearMap.id) X.t = X.t := by
-  -- We prove equality of linear maps first
-  have : liftMap (fun (i : Fin d) => (LinearMap.id : X.V i →ₗ[K] X.V i)) = LinearMap.id := by
-    apply PiTensorProduct.ext
-    apply MultilinearMap.ext; intro v
-    simp [liftMap]
-  rw [this]; rfl
-
-/-- Functoriality: composition. -/
-theorem liftMap_comp {X Y Z : TensorObj K d}
-    (f : ∀ i, Y.V i →ₗ[K] X.V i) (g : ∀ i, Z.V i →ₗ[K] Y.V i) :
-    liftMap f (liftMap g Z.t) = liftMap (fun i => (f i).comp (g i)) Z.t := by
-  have : liftMap f ∘ₗ liftMap g = liftMap (fun i => (f i).comp (g i)) := by
-    apply PiTensorProduct.ext
-    apply MultilinearMap.ext; intro v
-    simp [liftMap]
-  rw [← LinearMap.comp_apply, this]
 
 theorem restrict_refl (X : TensorObj K d) : Restrict X X := by
   use fun i => LinearMap.id
-  rw [liftMap_id]
+  rw [TensorObj.liftMap_id]
 
 theorem restrict_trans {X Y Z : TensorObj K d} : Restrict X Y → Restrict Y Z → Restrict X Z := by
   rintro ⟨f, hf⟩ ⟨g, hg⟩
   use fun i => (f i).comp (g i)
-  rw [← liftMap_comp, hg, hf]
+  rw [← TensorObj.liftMap_comp, hg, hf]
 
 /-- Taking restriction respects isomorphism. -/
 theorem restrict_iff_of_iso {X X' Y Y' : TensorObj K d}
@@ -52,21 +34,21 @@ theorem restrict_iff_of_iso {X X' Y Y' : TensorObj K d}
   constructor
   · rintro ⟨f, hf⟩
     use fun i => (iX.equiv i).toLinearMap.comp ((f i).comp (iY.equiv i).symm.toLinearMap)
-    rw [← liftMap_comp, ← liftMap_comp]
+    rw [← TensorObj.liftMap_comp, ← TensorObj.liftMap_comp]
     have hY_symm : liftMap (fun i => (iY.equiv i).symm.toLinearMap) Y'.t = Y.t := by
-      rw [← iY.map_t, liftMap_comp]
-      convert liftMap_id Y using 2
+      rw [← iY.map_t, TensorObj.liftMap_comp]
+      convert TensorObj.liftMap_id Y using 2
       apply PiTensorProduct.ext
       apply MultilinearMap.ext; intro v
       simp [liftMap, lift_tprod]
     rw [hY_symm, hf, iX.map_t]
   · rintro ⟨f, hf⟩
     use fun i => (iX.equiv i).symm.toLinearMap.comp ((f i).comp (iY.equiv i).toLinearMap)
-    rw [← liftMap_comp, ← liftMap_comp]
+    rw [← TensorObj.liftMap_comp, ← TensorObj.liftMap_comp]
     rw [iY.map_t, hf]
     have hX_symm : liftMap (fun i => (iX.equiv i).symm.toLinearMap) X'.t = X.t := by
-      rw [← iX.map_t, liftMap_comp]
-      convert liftMap_id X using 2
+      rw [← iX.map_t, TensorObj.liftMap_comp]
+      convert TensorObj.liftMap_id X using 2
       apply PiTensorProduct.ext
       apply MultilinearMap.ext; intro v
       simp [liftMap, lift_tprod]
