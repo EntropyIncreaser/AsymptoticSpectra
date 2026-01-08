@@ -1,7 +1,8 @@
-import AsymptoticSpectra
+import AsymptoticSpectra.Structures
+import AsymptoticSpectra.Spectrum
+import AsymptoticSpectra.Rank
 import AsymptoticSpectra.AsymptoticClosure
 import Mathlib.Analysis.SpecialFunctions.Pow.Real
-import Mathlib.Algebra.GroupPower.Order
 
 universe u
 
@@ -43,7 +44,7 @@ theorem asymptotic_le_imp_spectrum_le {a b : R}
   have h_bound : (ϕ a)^N ≤ (1 + ε')^N * (ϕ b)^N := by
     apply h_ϕ_hle.trans
     apply mul_le_mul_of_nonneg_right _ (pow_nonneg h_ϕ_nonneg_b N)
-    rw [← Real.rpow_nat_cast]
+    rw [← Real.rpow_natCast]
     exact hN.1
   rw [← mul_pow] at h_bound
   have hN_pos : 0 < N := hN.2
@@ -52,16 +53,15 @@ theorem asymptotic_le_imp_spectrum_le {a b : R}
     · linarith
     · exact h_ϕ_nonneg_b
   have h_ϕ_a_le : ϕ a ≤ (1 + ε') * ϕ b := by
-    apply le_of_pow_le_pow N h_bound_nonneg hN_pos h_bound
+    apply le_of_pow_le_pow_left₀ hN_pos.ne' h_bound_nonneg h_bound
   have : ϕ a ≤ ϕ b + ε' * ϕ b := by
     rw [add_mul, one_mul] at h_ϕ_a_le
     exact h_ϕ_a_le
   apply this.trans
-  apply _root_.add_le_add_left
   have h_div : ϕ b / (ϕ b + 1) ≤ 1 := by
-    apply div_le_one_of_le
-    · linarith
-    · positivity
+    rw [div_le_one (add_pos_of_nonneg_of_pos h_ϕ_nonneg_b _root_.zero_lt_one)]
+    linarith
+  gcongr
   calc (ε / (ϕ b + 1)) * ϕ b = ε * (ϕ b / (ϕ b + 1)) := by ring
     _ ≤ ε * 1 := mul_le_mul_of_nonneg_left h_div (le_of_lt hε)
     _ = ε := mul_one ε
