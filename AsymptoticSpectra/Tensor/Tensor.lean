@@ -134,6 +134,7 @@ noncomputable def liftMap {ι : Type*} [Fintype ι] {V W : ι → Type*}
   lift <| (tprod K).compLinearMap f
 
 /-- Functoriality of PiTensorProduct: identity map. -/
+@[simp]
 theorem liftMap_id (X : TensorObj K d) : liftMap (fun _ => LinearMap.id) X.t = X.t := by
   have : liftMap (fun (i : Fin d) => (LinearMap.id : X.V i →ₗ[K] X.V i)) = LinearMap.id := by
     apply PiTensorProduct.ext
@@ -142,6 +143,7 @@ theorem liftMap_id (X : TensorObj K d) : liftMap (fun _ => LinearMap.id) X.t = X
   rw [this]; rfl
 
 /-- Functoriality of PiTensorProduct: composition. -/
+@[simp]
 theorem liftMap_comp {ι : Type*} [Fintype ι] {V₁ V₂ V₃ : ι → Type*}
     [∀ i, AddCommGroup (V₁ i)] [∀ i, Module K (V₁ i)]
     [∀ i, AddCommGroup (V₂ i)] [∀ i, Module K (V₂ i)]
@@ -294,7 +296,7 @@ noncomputable def interchangeMap {ι : Type*} [Fintype ι] [DecidableEq ι] {V W
             · subst h; simp
             · simp [h]
 
-/-- Interchange map: (⨂ V_i) ⊗ (⨂ W_i) → ⨂ (V_i ⊗ W_i). -/
+
 noncomputable def interchange {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
     [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)] :
@@ -578,98 +580,28 @@ theorem mul_assoc_isomorphic {X Y Z : TensorObj K d} : Isomorphic (X * Y * Z) (X
       rw [interchange_assoc]
   }⟩
 
-end TensorObj
-
-/-- The quotient of `TensorObj` by linear isomorphism. -/
-def Tensor (K : Type u) [Field K] (d : ℕ) [Fact (1 < d)] :=
-  Quotient (TensorObj.tensorSetoid.{u, max u v} K d)
-
-namespace Tensor
-
-open TensorObj
-variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
-
-/-- Decategorification map. -/
-def toTensor (X : TensorObj.{u, max u v} K d) : Tensor.{u, v} K d :=
-  Quotient.mk (tensorSetoid.{u, max u v} K d) X
-
-/-- Zero and One objects (minimal placeholders). -/
-noncomputable def zeroObj : TensorObj.{u, max u v} K d := TensorObj.zeroObj
-noncomputable def oneObj : TensorObj.{u, max u v} K d := TensorObj.oneObj
-
-noncomputable instance : Zero (Tensor.{u, v} K d) := ⟨toTensor zeroObj⟩
-noncomputable instance : One (Tensor.{u, v} K d) := ⟨toTensor oneObj⟩
-
-/-- Lift addition to the quotient. -/
-noncomputable def add (x y : Tensor K d) : Tensor K d :=
-  Quotient.liftOn₂ x y
-    (fun X Y => toTensor (X + Y))
-    (fun _ _ _ _ hab hcd => Quotient.sound (add_isomorphic hab hcd))
-
-/-- Lift multiplication to the quotient. -/
-noncomputable def mul (x y : Tensor K d) : Tensor K d :=
-  Quotient.liftOn₂ x y
-    (fun X Y => toTensor (X * Y))
-    (fun _ _ _ _ hab hcd => Quotient.sound (mul_isomorphic hab hcd))
-
-noncomputable instance : Add (Tensor.{u, v} K d) := ⟨add⟩
-noncomputable instance : Mul (Tensor.{u, v} K d) := ⟨mul⟩
-
-section Isomorphisms
-
-variable {X Y Z : TensorObj.{u, max u v} K d}
-
-theorem add_comm (x y : Tensor K d) : x + y = y + x := by
-  induction x using Quotient.inductionOn with | h x =>
-  induction y using Quotient.inductionOn with | h y =>
-  dsimp [add, toTensor]
-  apply Quotient.sound
-  exact add_comm_isomorphic
-
-theorem add_assoc (x y z : Tensor K d) : x + y + z = x + (y + z) := by
-  induction x using Quotient.inductionOn with | h x =>
-  induction y using Quotient.inductionOn with | h y =>
-  induction z using Quotient.inductionOn with | h z =>
-  dsimp [add, toTensor]
-  apply Quotient.sound
-  exact add_assoc_isomorphic
-
-theorem zero_add (x : Tensor K d) : 0 + x = x := by
-  induction x using Quotient.inductionOn with | h x =>
-  dsimp [add, toTensor, zeroObj]
-  apply Quotient.sound
-  refine ⟨{ equiv := fun i => prodZero, map_t := ?_ }⟩
-  change liftMap _ (liftMap (fun i => LinearMap.inl K (TensorObj.zeroObj.V i) (x.V i)) 0 + liftMap (fun i => LinearMap.inr K (TensorObj.zeroObj.V i) (x.V i)) x.t) = _
-  rw [LinearMap.map_add]
-  erw [LinearMap.map_zero, _root_.zero_add]
+theorem add_zero_isomorphic {X : TensorObj K d} : Isomorphic (X + zeroObj) X := by
+  refine ⟨{ equiv := fun i => (prodComm).trans prodZero, map_t := ?_ }⟩
+  -- (X + 0).t = liftMap inl X.t + liftMap inr 0
+  -- 0 in TensorObj.zeroObj is 0
+  change liftMap _ (liftMap (fun i => LinearMap.inl K (X.V i) (TensorObj.zeroObj.V i)) X.t + 0) = _
+  rw [add_zero]
   erw [liftMap_comp]
-  convert liftMap_id x using 2
+  convert liftMap_id X using 2
 
-theorem add_zero (x : Tensor K d) : x + 0 = x := by
-  rw [add_comm, zero_add]
 
-theorem mul_comm (x y : Tensor K d) : x * y = y * x := by
-  induction x using Quotient.inductionOn with | h x =>
-  induction y using Quotient.inductionOn with | h y =>
-  dsimp [mul, toTensor]
-  apply Quotient.sound
-  exact mul_comm_isomorphic
+theorem zero_add_isomorphic {X : TensorObj K d} : Isomorphic (zeroObj + X) X := by
+  refine ⟨{ equiv := fun i => prodZero, map_t := ?_ }⟩
+  change liftMap _ (0 + liftMap (fun i => LinearMap.inr K (TensorObj.zeroObj.V i) (X.V i)) X.t) = _
+  rw [zero_add]
+  erw [liftMap_comp]
+  convert liftMap_id X using 2
 
-theorem mul_assoc (x y z : Tensor K d) : x * y * z = x * (y * z) := by
-  induction x using Quotient.inductionOn with | h x =>
-  induction y using Quotient.inductionOn with | h y =>
-  induction z using Quotient.inductionOn with | h z =>
-  dsimp [mul, toTensor]
-  apply Quotient.sound
-  exact mul_assoc_isomorphic
 
-theorem one_mul (x : Tensor K d) : 1 * x = x := by
-  induction x using Quotient.inductionOn with | h x =>
-  dsimp [mul, toTensor, oneObj]
-  apply Quotient.sound
+theorem one_mul_isomorphic {X : TensorObj K d} : Isomorphic (oneObj * X) X := by
   refine ⟨{ equiv := fun i => tensorOne, map_t := ?_ }⟩
-  change liftMap (fun i => tensorOne.toLinearMap) (interchange oneObj.t x.t) = x.t
-  induction x.t using PiTensorProduct.induction_on with
+  change liftMap (fun i => tensorOne.toLinearMap) (interchange oneObj.t X.t) = X.t
+  induction X.t using PiTensorProduct.induction_on with
   | smul_tprod c v =>
     change liftMap (fun i => tensorOne.toLinearMap) (interchange (tprod K (fun _ => ULift.up 1)) (c • tprod K v)) = c • tprod K v
     dsimp only [interchange, liftMap, interchangeMap, interchangeAux]
@@ -682,15 +614,11 @@ theorem one_mul (x : Tensor K d) : 1 * x = x := by
     dsimp only [interchange, liftMap] at ih1 ih2 ⊢
     simp only [map_add, ih1, ih2]
 
-theorem mul_one (x : Tensor K d) : x * 1 = x := by
-  rw [mul_comm, one_mul]
+theorem mul_one_isomorphic {X : TensorObj K d} : Isomorphic (X * oneObj) X := by
+  let h := mul_comm_isomorphic (X := X) (Y := oneObj)
+  exact isomorphic_trans h one_mul_isomorphic
 
-theorem mul_add (x y z : Tensor K d) : x * (y + z) = x * y + x * z := by
-  induction x using Quotient.inductionOn with | h X =>
-  induction y using Quotient.inductionOn with | h Y =>
-  induction z using Quotient.inductionOn with | h Z =>
-  dsimp [mul, add, toTensor]
-  apply Quotient.sound
+theorem mul_add_isomorphic {X Y Z : TensorObj K d} : Isomorphic (X * (Y + Z)) (X * Y + X * Z) := by
   refine ⟨{ equiv := fun i => distribLeft, map_t := ?_ }⟩
 
   -- Step A: Use linearity to split the sum
@@ -740,19 +668,153 @@ theorem mul_add (x y z : Tensor K d) : x * (y + z) = x * y + x * z := by
       erw [LinearMap.inr_apply]
     | add a b iha ihb => simp only [map_add, iha, ihb]
 
-theorem add_mul (x y z : Tensor K d) : (x + y) * z = x * z + y * z := by
-  rw [mul_comm, mul_add, mul_comm z x, mul_comm z y]
+theorem add_mul_isomorphic {X Y Z : TensorObj K d} : Isomorphic ((X + Y) * Z) (X * Z + Y * Z) := by
+  let h1 := mul_comm_isomorphic (K := K) (d := d) (X := X + Y) (Y := Z)
+  let h2 := mul_add_isomorphic (K := K) (d := d) (X := Z) (Y := X) (Z := Y)
+  let h3 := add_isomorphic (X := Z * X) (Y := X * Z) (Z := Z * Y) (W := Y * Z)
+              (mul_comm_isomorphic (X := Z) (Y := X))
+              (mul_comm_isomorphic (X := Z) (Y := Y))
+  refine isomorphic_trans h1 (isomorphic_trans h2 h3)
 
-theorem zero_mul (x : Tensor K d) : 0 * x = 0 := by
-  induction x using Quotient.inductionOn with | h x =>
-  dsimp [mul, toTensor, zeroObj]
-  apply Quotient.sound
-  refine ⟨{ equiv := fun i => tensorZero, map_t := ?_ }⟩
-  change liftMap (fun i => tensorZero.toLinearMap) (interchange 0 x.t) = 0
+theorem zero_mul_isomorphic {X : TensorObj K d} : Isomorphic (zeroObj * X) zeroObj := by
+  refine ⟨{ equiv := fun i => tensorZero (V := X.V i), map_t := ?_ }⟩
+  change liftMap (fun i => (tensorZero (V := X.V i)).toLinearMap) (interchange zeroObj.t X.t) = zeroObj.t
+  dsimp [zeroObj] -- 0
   rw [map_zero, LinearMap.zero_apply, map_zero]
 
-theorem mul_zero (x : Tensor K d) : x * 0 = 0 := by
-  rw [mul_comm, zero_mul]
+end TensorObj
+
+/-- The quotient of `TensorObj` by linear isomorphism. -/
+def Tensor (K : Type u) [Field K] (d : ℕ) [Fact (1 < d)] :=
+  Quotient (TensorObj.tensorSetoid.{u, max u v} K d)
+
+namespace Tensor
+
+open TensorObj
+variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
+
+/-- Decategorification map. -/
+def toTensor (X : TensorObj.{u, max u v} K d) : Tensor.{u, v} K d :=
+  Quotient.mk (tensorSetoid.{u, max u v} K d) X
+
+/-- Zero and One objects (minimal placeholders). -/
+noncomputable def zeroObj : TensorObj.{u, max u v} K d := TensorObj.zeroObj
+noncomputable def oneObj : TensorObj.{u, max u v} K d := TensorObj.oneObj
+
+noncomputable instance : Zero (Tensor.{u, v} K d) := ⟨toTensor zeroObj⟩
+noncomputable instance : One (Tensor.{u, v} K d) := ⟨toTensor oneObj⟩
+
+/-- Lift addition to the quotient. -/
+noncomputable def add (x y : Tensor K d) : Tensor K d :=
+  Quotient.liftOn₂ x y
+    (fun X Y => toTensor (X + Y))
+    (fun _ _ _ _ hab hcd => Quotient.sound (add_isomorphic hab hcd))
+
+/-- Lift multiplication to the quotient. -/
+noncomputable def mul (x y : Tensor K d) : Tensor K d :=
+  Quotient.liftOn₂ x y
+    (fun X Y => toTensor (X * Y))
+    (fun _ _ _ _ hab hcd => Quotient.sound (mul_isomorphic hab hcd))
+
+noncomputable instance : Add (Tensor.{u, v} K d) := ⟨add⟩
+noncomputable instance : Mul (Tensor.{u, v} K d) := ⟨mul⟩
+
+section QuotientHelpers
+
+variable {X Y Z : TensorObj.{u, max u v} K d}
+
+/-- Helper to lift a unary operation equality proof from TensorObj to Tensor. -/
+theorem lift_unary_iso {f g : Tensor K d → Tensor K d} {F G : TensorObj K d → TensorObj K d}
+    (h_lift_f : ∀ X, f (toTensor X) = toTensor (F X))
+    (h_lift_g : ∀ X, g (toTensor X) = toTensor (G X))
+    (h_iso : ∀ X, Isomorphic (F X) (G X)) : ∀ x, f x = g x := by
+  intro x
+  induction x using Quotient.inductionOn with | h X =>
+  change f (toTensor X) = g (toTensor X)
+  rw [h_lift_f, h_lift_g]
+  apply Quotient.sound
+  exact h_iso X
+
+/-- Helper to lift a binary operation equality proof from TensorObj to Tensor. -/
+theorem lift_binary_iso {f g : Tensor K d → Tensor K d → Tensor K d}
+    {F G : TensorObj K d → TensorObj K d → TensorObj K d}
+    (h_lift_f : ∀ X Y, f (toTensor X) (toTensor Y) = toTensor (F X Y))
+    (h_lift_g : ∀ X Y, g (toTensor X) (toTensor Y) = toTensor (G X Y))
+    (h_iso : ∀ X Y, Isomorphic (F X Y) (G X Y)) : ∀ x y, f x y = g x y := by
+  intro x y
+  induction x using Quotient.inductionOn with | h X =>
+  induction y using Quotient.inductionOn with | h Y =>
+  change f (toTensor X) (toTensor Y) = g (toTensor X) (toTensor Y)
+  rw [h_lift_f, h_lift_g]
+  apply Quotient.sound
+  exact h_iso X Y
+
+/-- Helper to lift a ternary operation equality proof from TensorObj to Tensor. -/
+theorem lift_ternary_iso {f g : Tensor K d → Tensor K d → Tensor K d → Tensor K d}
+    {F G : TensorObj K d → TensorObj K d → TensorObj K d → TensorObj K d}
+    (h_lift_f : ∀ X Y Z, f (toTensor X) (toTensor Y) (toTensor Z) = toTensor (F X Y Z))
+    (h_lift_g : ∀ X Y Z, g (toTensor X) (toTensor Y) (toTensor Z) = toTensor (G X Y Z))
+    (h_iso : ∀ X Y Z, Isomorphic (F X Y Z) (G X Y Z)) : ∀ x y z, f x y z = g x y z := by
+  intro x y z
+  induction x using Quotient.inductionOn with | h X =>
+  induction y using Quotient.inductionOn with | h Y =>
+  induction z using Quotient.inductionOn with | h Z =>
+  change f (toTensor X) (toTensor Y) (toTensor Z) = g (toTensor X) (toTensor Y) (toTensor Z)
+  rw [h_lift_f, h_lift_g]
+  apply Quotient.sound
+  exact h_iso X Y Z
+
+end QuotientHelpers
+
+section Isomorphisms
+
+variable {X Y Z : TensorObj.{u, max u v} K d}
+
+theorem add_comm (x y : Tensor K d) : x + y = y + x :=
+  lift_binary_iso (f := Tensor.add) (g := fun a b => b + a) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => add_comm_isomorphic) x y
+
+theorem add_assoc (x y z : Tensor K d) : x + y + z = x + (y + z) :=
+  lift_ternary_iso (f := fun a b c => a + b + c) (g := fun a b c => a + (b + c))
+    (fun _ _ _ => rfl) (fun _ _ _ => rfl) (fun _ _ _ => add_assoc_isomorphic) x y z
+
+theorem zero_add (x : Tensor K d) : 0 + x = x :=
+  lift_unary_iso (f := fun a => 0 + a) (g := id)
+    (fun _ => rfl) (fun _ => rfl) (fun _ => zero_add_isomorphic) x
+
+theorem add_zero (x : Tensor K d) : x + 0 = x :=
+  lift_unary_iso (f := fun a => a + 0) (g := id)
+    (fun _ => rfl) (fun _ => rfl) (fun _ => add_zero_isomorphic) x
+
+theorem mul_comm (x y : Tensor K d) : x * y = y * x :=
+  lift_binary_iso (f := Tensor.mul) (g := fun a b => b * a)
+    (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => mul_comm_isomorphic) x y
+
+theorem mul_assoc (x y z : Tensor K d) : x * y * z = x * (y * z) :=
+  lift_ternary_iso (f := fun a b c => a * b * c) (g := fun a b c => a * (b * c))
+    (fun _ _ _ => rfl) (fun _ _ _ => rfl) (fun _ _ _ => mul_assoc_isomorphic) x y z
+
+theorem one_mul (x : Tensor K d) : 1 * x = x :=
+  lift_unary_iso (f := fun a => 1 * a) (g := id)
+    (fun _ => rfl) (fun _ => rfl) (fun _ => one_mul_isomorphic) x
+
+theorem mul_one (x : Tensor K d) : x * 1 = x :=
+  lift_unary_iso (f := fun a => a * 1) (g := id)
+    (fun _ => rfl) (fun _ => rfl) (fun _ => mul_one_isomorphic) x
+
+theorem mul_add (x y z : Tensor K d) : x * (y + z) = x * y + x * z :=
+  lift_ternary_iso (f := fun a b c => a * (b + c)) (g := fun a b c => a * b + a * c)
+    (fun _ _ _ => rfl) (fun _ _ _ => rfl) (fun _ _ _ => mul_add_isomorphic) x y z
+
+theorem add_mul (x y z : Tensor K d) : (x + y) * z = x * z + y * z :=
+  lift_ternary_iso (f := fun a b c => (a + b) * c) (g := fun a b c => a * c + b * c)
+    (fun _ _ _ => rfl) (fun _ _ _ => rfl) (fun _ _ _ => add_mul_isomorphic) x y z
+
+theorem zero_mul (x : Tensor K d) : 0 * x = 0 :=
+  lift_unary_iso (f := fun a => 0 * a) (g := fun _ => 0)
+    (fun _ => rfl) (fun _ => rfl) (fun _ => zero_mul_isomorphic) x
+
+theorem mul_zero (x : Tensor K d) : x * 0 = 0 :=
+  by rw [mul_comm, zero_mul]
 
 private noncomputable def natCast (n : ℕ) : Tensor K d := nsmulRec n 1
 
