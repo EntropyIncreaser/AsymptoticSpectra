@@ -9,6 +9,7 @@ import Mathlib.Order.Monotone.Basic
 import AsymptoticSpectra.Submultiplicative
 import AsymptoticSpectra.Structures
 import AsymptoticSpectra.AsymptoticClosure
+import AsymptoticSpectra.Tensor.Tensor
 
 universe u
 

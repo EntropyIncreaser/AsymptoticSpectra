@@ -43,6 +43,8 @@ namespace TensorObj
 
 variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
 
+noncomputable section
+
 /-- Helper for product of LinearEquivs. -/
 def prodEquiv {M M' N N' : Type*} [AddCommMonoid M] [AddCommMonoid M'] [AddCommMonoid N] [AddCommMonoid N']
     [Module K M] [Module K M'] [Module K N] [Module K N']
@@ -127,7 +129,7 @@ def distribRight {M N P : Type*} [AddCommGroup M] [AddCommGroup N] [AddCommGroup
 
 /-- Functoriality of PiTensorProduct: a family of linear maps induces a map on the tensor product.
     Renamed to `liftMap` to avoid namespace conflicts. -/
-noncomputable def liftMap {ι : Type*} [Fintype ι] {V W : ι → Type*}
+def liftMap {ι : Type*} [Fintype ι] {V W : ι → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
     [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
     (f : ∀ i, V i →ₗ[K] W i) : PiTensorProduct K V →ₗ[K] PiTensorProduct K W :=
@@ -143,7 +145,6 @@ theorem liftMap_id (X : TensorObj K d) : liftMap (fun _ => LinearMap.id) X.t = X
   rw [this]; rfl
 
 /-- Functoriality of PiTensorProduct: composition. -/
-@[simp]
 theorem liftMap_comp {ι : Type*} [Fintype ι] {V₁ V₂ V₃ : ι → Type*}
     [∀ i, AddCommGroup (V₁ i)] [∀ i, Module K (V₁ i)]
     [∀ i, AddCommGroup (V₂ i)] [∀ i, Module K (V₂ i)]
@@ -157,7 +158,7 @@ theorem liftMap_comp {ι : Type*} [Fintype ι] {V₁ V₂ V₃ : ι → Type*}
   rw [← LinearMap.comp_apply, this]
 
 /-- Helper to construct interchange map definition -/
-noncomputable def interchangeAux {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι → Type*}
+def interchangeAux {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
     [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
     (v : ∀ i, V i) : MultilinearMap K W (PiTensorProduct K (fun i => V i ⊗[K] W i)) where
@@ -297,13 +298,14 @@ noncomputable def interchangeMap {ι : Type*} [Fintype ι] [DecidableEq ι] {V W
             · simp [h]
 
 
-noncomputable def interchange {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι → Type*}
+def interchange {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
     [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)] :
     PiTensorProduct K V →ₗ[K] PiTensorProduct K W →ₗ[K] PiTensorProduct K (fun i => V i ⊗[K] W i) :=
   lift interchangeMap
 
 /-- Naturality of the interchange map. -/
+@[simp]
 theorem liftMap_interchange {ι : Type*} [Fintype ι] [DecidableEq ι]
     {V₁ V₂ V₃ V₄ : ι → Type*}
     [∀ i, AddCommGroup (V₁ i)] [∀ i, Module K (V₁ i)]
@@ -328,18 +330,20 @@ theorem liftMap_interchange {ι : Type*} [Fintype ι] [DecidableEq ι]
     simp only [map_add, LinearMap.add_apply, ih1, ih2]
 
 /-- Direct sum of two tensor objects. -/
-noncomputable def add (X Y : TensorObj K d) : TensorObj K d where
+def add (X Y : TensorObj K d) : TensorObj K d where
   V := fun i => X.V i × Y.V i
   t := liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) X.t +
        liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) Y.t
 
 /-- Tensor product of two tensor objects. -/
-noncomputable def mul (X Y : TensorObj K d) : TensorObj K d where
+def mul (X Y : TensorObj K d) : TensorObj K d where
   V := fun i => X.V i ⊗[K] Y.V i
   t := interchange X.t Y.t
 
-noncomputable instance : Add (TensorObj K d) := ⟨add⟩
-noncomputable instance : Mul (TensorObj K d) := ⟨mul⟩
+instance : Add (TensorObj K d) := ⟨add⟩
+instance : Mul (TensorObj K d) := ⟨mul⟩
+
+end
 
 end TensorObj
 
@@ -371,12 +375,12 @@ noncomputable def oneObj : TensorObj.{u, max u v} K d where
 def Isomorphic (X Y : TensorObj K d) : Prop := Nonempty (TensorIso X Y)
 
 /-- The isomorphism relation is an equivalence relation. -/
-theorem isomorphic_refl (X : TensorObj K d) : Isomorphic X X := by
+private theorem isomorphic_refl (X : TensorObj K d) : Isomorphic X X := by
   refine ⟨{ equiv := fun i => LinearEquiv.refl _ _, map_t := ?_ }⟩
   simp only [LinearEquiv.refl_toLinearMap]
   exact liftMap_id X
 
-theorem isomorphic_symm {X Y : TensorObj K d} : Isomorphic X Y → Isomorphic Y X := by
+private theorem isomorphic_symm {X Y : TensorObj K d} : Isomorphic X Y → Isomorphic Y X := by
   rintro ⟨iso⟩
   refine ⟨{ equiv := fun i => (iso.equiv i).symm, map_t := ?_ }⟩
   rw [← iso.map_t, liftMap_comp]
@@ -385,7 +389,7 @@ theorem isomorphic_symm {X Y : TensorObj K d} : Isomorphic X Y → Isomorphic Y 
   apply MultilinearMap.ext; intro v
   simp
 
-theorem isomorphic_trans {X Y Z : TensorObj K d} : Isomorphic X Y → Isomorphic Y Z → Isomorphic X Z := by
+private theorem isomorphic_trans {X Y Z : TensorObj K d} : Isomorphic X Y → Isomorphic Y Z → Isomorphic X Z := by
   rintro ⟨iXY⟩ ⟨iYZ⟩
   refine ⟨{ equiv := fun i => (iXY.equiv i).trans (iYZ.equiv i), map_t := ?_ }⟩
   simp only [LinearEquiv.coe_trans]
@@ -541,6 +545,7 @@ theorem mul_comm_isomorphic {X Y : TensorObj K d} : Isomorphic (X * Y) (Y * X) :
     erw [ih1, ih2]
 
 /-- Associativity of the interchange map. -/
+@[simp]
 theorem interchange_assoc {ι : Type*} [Fintype ι] [DecidableEq ι]
     {V W U : ι → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
@@ -821,9 +826,9 @@ private noncomputable def natCast (n : ℕ) : Tensor K d := nsmulRec n 1
 end Isomorphisms
 
 noncomputable instance : CommSemiring (Tensor.{u, v} K d) where
-  add := Tensor.add
+  add := add
   zero := 0
-  mul := Tensor.mul
+  mul := mul
   one := 1
   add_assoc := add_assoc
   zero_add := zero_add
@@ -836,6 +841,7 @@ noncomputable instance : CommSemiring (Tensor.{u, v} K d) where
   left_distrib := mul_add
   right_distrib := add_mul
   zero_mul := zero_mul
+
   mul_zero := mul_zero
   nsmul := nsmulRec
   npow := npowRec
