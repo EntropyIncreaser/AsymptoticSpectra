@@ -7,6 +7,9 @@ import Mathlib.Topology.Compactness.Compact
 import Mathlib.Topology.Separation.Hausdorff
 import Mathlib.Tactic.Ext
 import Mathlib.Tactic.Linarith
+import Mathlib.Topology.Order.Real
+import Mathlib.Topology.Instances.Real.Lemmas
+import Mathlib.Topology.MetricSpace.Basic
 import AsymptoticSpectra.Structures
 import AsymptoticSpectra.Rank
 import AsymptoticSpectra.AsymptoticClosure
@@ -57,6 +60,29 @@ instance (P : StrassenPreorder R) : RingHomClass (AsymptoticSpectrumPoint R P) R
   map_mul f := f.toRingHom.map_mul'
   map_zero f := f.toRingHom.map_zero'
   map_one f := f.toRingHom.map_one'
+
+/-- The product space of intervals [0, rank P a] that contains the asymptotic spectrum. -/
+def SpectrumBox (P : StrassenPreorder R) : Type u :=
+  ∀ a : R, ↥(Set.Icc (0 : ℝ) (P.rank a : ℝ))
+
+instance (P : StrassenPreorder R) : TopologicalSpace (SpectrumBox P) :=
+  Pi.topologicalSpace
+
+instance (P : StrassenPreorder R) : CompactSpace (SpectrumBox P) :=
+  Pi.compactSpace
+
+/-- The natural map from spectrum points to the compact box. -/
+def toBox {P : StrassenPreorder R} (ϕ : AsymptoticSpectrumPoint R P) : SpectrumBox P :=
+  fun a => ⟨ϕ a, by
+    constructor
+    · have h0 : P.le 0 a := P.all_nonneg a
+      have := ϕ.monotone' h0
+      rw [map_zero (ϕ.toRingHom)] at this
+      exact this
+    · have hr := Nat.find_spec (P.upper_archimedean a)
+      have := ϕ.monotone' hr
+      rw [map_natCast] at this
+      exact this⟩
 
 /-- The topology on the asymptotic spectrum is the topology of pointwise convergence. -/
 instance (P : StrassenPreorder R) : TopologicalSpace (AsymptoticSpectrumPoint R P) :=
@@ -251,7 +277,96 @@ theorem continuous_eval {R : Type u} [CommSemiring R] (P : StrassenPreorder R) (
   Continuous (fun (ϕ : AsymptoticSpectrumPoint R P) => ϕ a) :=
   continuous_pi_iff.mp continuous_induced_dom a
 
-/-- The asymptotic spectrum is a compact Hausdorff space. -/
-instance (P : StrassenPreorder R) : CompactSpace (AsymptoticSpectrum R P) := sorry
+/-- The map to the bounding box is continuous. -/
+theorem continuous_toBox {P : StrassenPreorder R} :
+    Continuous (toBox (P := P)) := by
+  apply continuous_pi
+  intro a
+  apply Continuous.subtype_mk
+  apply continuous_eval P a
 
-instance (P : StrassenPreorder R) : T2Space (AsymptoticSpectrum R P) := sorry
+/-- The map to the bounding box is an embedding. -/
+theorem embedding_toBox {P : StrassenPreorder R} :
+    IsEmbedding (toBox (P := P)) := {
+  eq_induced := by
+    let coe : SpectrumBox P → (R → ℝ) := fun f a => f a
+    have h_ind : instTopologicalSpaceSpectrumBox P = TopologicalSpace.induced coe Pi.topologicalSpace := by
+      simp only [instTopologicalSpaceSpectrumBox, Pi.topologicalSpace, induced_iInf, induced_compose]
+      congr; funext a
+      have : IsEmbedding (Subtype.val : Set.Icc (0:ℝ) (P.rank a) → ℝ) := IsEmbedding.subtypeVal
+      rw [this.eq_induced]
+      simp only [induced_compose]
+      rfl
+    change _ = TopologicalSpace.induced toBox (instTopologicalSpaceSpectrumBox P)
+    rw [h_ind, induced_compose]
+    rfl
+  injective := fun ϕ ψ h => by
+    ext a
+    have := congr_fun h a
+    rw [Subtype.ext_iff] at this
+    exact this
+}
+
+/-- The range of the map to the bounding box is closed. -/
+theorem isClosed_range_toBox {P : StrassenPreorder R} :
+    IsClosed (Set.range (toBox (P := P))) := by
+  let f_val (a : R) : SpectrumBox P → ℝ := fun f => (f a : ℝ)
+  have h_val (a : R) : Continuous (f_val a) :=
+    (continuous_apply a).subtype_val
+
+  let S_add := {f : SpectrumBox P | ∀ a b, f_val (a + b) f = f_val a f + f_val b f}
+  let S_mul := {f : SpectrumBox P | ∀ a b, f_val (a * b) f = f_val a f * f_val b f}
+  let S_zero := {f : SpectrumBox P | f_val 0 f = 0}
+  let S_one := {f : SpectrumBox P | f_val 1 f = 1}
+  let S_mono := {f : SpectrumBox P | ∀ a b, P.le a b → f_val a f ≤ f_val b f}
+
+  have h_cl : IsClosed (S_add ∩ S_mul ∩ S_zero ∩ S_one ∩ S_mono) := by
+    repeat' apply IsClosed.inter
+    · simp only [S_add, setOf_forall]
+      exact isClosed_iInter fun a => isClosed_iInter fun b => isClosed_eq (h_val _) ((h_val _).add (h_val _))
+    · simp only [S_mul, setOf_forall]
+      exact isClosed_iInter fun a => isClosed_iInter fun b => isClosed_eq (h_val _) ((h_val _).mul (h_val _))
+    · exact isClosed_eq (h_val 0) continuous_const
+    · exact isClosed_eq (h_val 1) continuous_const
+    · simp only [S_mono, setOf_forall]
+      exact isClosed_iInter fun a => isClosed_iInter fun b => isClosed_iInter fun _ => isClosed_le (h_val _) (h_val _)
+
+  have h_eq : Set.range (toBox (P := P)) = S_add ∩ S_mul ∩ S_zero ∩ S_one ∩ S_mono := by
+    ext f
+    constructor
+    · rintro ⟨ϕ, rfl⟩
+      simp only [Set.mem_inter_iff, S_add, S_mul, S_zero, S_one, S_mono, mem_setOf_eq]
+      exact ⟨⟨⟨⟨fun a b => map_add ϕ a b, fun a b => map_mul ϕ a b⟩, map_zero ϕ⟩, map_one ϕ⟩, fun a b hab => ϕ.monotone' hab⟩
+    · intro h
+      rcases h with ⟨⟨⟨⟨h_add, h_mul⟩, h_zero⟩, h_one⟩, h_mono⟩
+      let ϕ_hom : R →+* ℝ := {
+        toFun := fun a => f_val a f
+        map_add' := h_add
+        map_mul' := h_mul
+        map_zero' := h_zero
+        map_one' := h_one
+      }
+      let ϕ : AsymptoticSpectrumPoint R P := {
+        toRingHom := ϕ_hom
+        monotone' := fun {a b} hab => h_mono a b hab
+      }
+      use ϕ
+      apply funext
+      intro a
+      apply Subtype.ext
+      rfl
+
+  rw [h_eq]
+  exact h_cl
+
+instance (P : StrassenPreorder R) : T2Space (SpectrumBox P) :=
+  Pi.t2Space
+
+/-- The asymptotic spectrum is a compact space. -/
+instance (P : StrassenPreorder R) : CompactSpace (AsymptoticSpectrumPoint R P) :=
+  ⟨by
+    rw [embedding_toBox.isCompact_iff, Set.image_univ]
+    exact IsClosed.isCompact isClosed_range_toBox⟩
+
+instance (P : StrassenPreorder R) : T2Space (AsymptoticSpectrumPoint R P) :=
+  T2Space.of_injective_continuous embedding_toBox.injective continuous_toBox
