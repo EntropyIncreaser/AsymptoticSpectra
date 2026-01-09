@@ -2,14 +2,18 @@ import AsymptoticSpectra.Structures
 import Mathlib.Topology.Basic
 import Mathlib.Analysis.SpecialFunctions.Pow.Real
 import Mathlib.Algebra.Order.Monoid.Unbundled.Pow
--- import Mathlib.Algebra.GroupPower.Order
+import Mathlib.Algebra.Order.Ring.Pow
+import Mathlib.Algebra.Order.Ring.Defs
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Finset.Lattice.Fold
 import Mathlib.Analysis.SpecificLimits.Basic
 import Mathlib.Algebra.BigOperators.Group.Finset.Basic
--- import Mathlib.Algebra.BigOperators.Order
 import Mathlib.Data.Nat.Choose.Basic
 import Mathlib.Data.Nat.Choose.Cast
+import Mathlib.Order.Zorn
+import Mathlib.Analysis.SpecificLimits.Normed
+import AsymptoticSpectra.Submultiplicative
+import AsymptoticSpectra.Rank
 
 universe u
 
@@ -72,26 +76,47 @@ lemma isSubexponential_iff_exists_constant {f : ℕ → ℕ} :
         mul_assoc, div_mul_cancel₀ _ (ne_of_gt h_pos), one_mul] at this
     exact this
 
-lemma IsSubexponential.const_one : IsSubexponential (fun _ => 1) := by
+lemma IsSubexponential.const (k : ℕ) : IsSubexponential (fun _ => k) := by
+  rw [isSubexponential_iff_exists_constant]
   intro ε hε
-  apply Eventually.of_forall
+  use k
   intro n
-  simp
-  have h1 : 1 ≤ 1 + ε := by linarith
-  induction n with
-  | zero => simp
-  | succ n ih =>
-    rw [pow_succ]
-    exact one_le_mul_of_one_le_of_one_le ih h1
+  rw [Real.rpow_natCast]
+  have h_base : 1 ≤ 1 + ε := by linarith
+  have h_pow : 1 ≤ (1 + ε) ^ n := one_le_pow₀ h_base
+  have := mul_le_mul_of_nonneg_left h_pow (Nat.cast_nonneg k)
+  simpa using this
+
+lemma IsSubexponential.const_one : IsSubexponential (fun _ => 1) := IsSubexponential.const 1
+
+lemma IsSubexponential.linear : IsSubexponential (fun n => n + 1) := by
+  rw [isSubexponential_iff_exists_constant]
+  intro ε hε
+  let C := max 1 (1/ε)
+  use C
+  intro n
+  rw [Real.rpow_natCast]
+  have h_bern : 1 + (n : ℝ) * ε ≤ (1 + ε) ^ n := one_add_mul_le_pow (by linarith) n
+  have hC : 1 ≤ C := le_max_left _ _
+  have hCeps : 1 ≤ C * ε := by
+    rw [← div_mul_cancel₀ 1 (ne_of_gt hε)]
+    exact mul_le_mul_of_nonneg_right (le_max_right 1 (1/ε)) (le_of_lt hε)
+  calc
+    ((n + 1 : ℕ) : ℝ) = n + 1 := by simp
+    _ = n * 1 + 1 := by ring
+    _ ≤ n * (C * ε) + C := add_le_add (mul_le_mul_of_nonneg_left hCeps (Nat.cast_nonneg n)) hC
+    _ = C * (1 + n * ε) := by ring
+    _ ≤ C * (1 + ε) ^ n := mul_le_mul_of_nonneg_left h_bern (by linarith [hC])
 
 lemma IsSubexponential.mul {f g : ℕ → ℕ} (hf : IsSubexponential f) (hg : IsSubexponential g) :
     IsSubexponential (fun n => f n * g n) := by
   intro ε hε
   let η := Real.sqrt (1 + ε) - 1
   have hη : 0 < η := by
-    apply sub_pos.mpr
-    rw [Real.lt_sqrt (by linarith)]
-    simp [hε]
+    dsimp [η]
+    rw [sub_pos]
+    apply Real.lt_sqrt_of_sq_lt
+    linarith
   specialize hf η hη
   specialize hg η hη
   filter_upwards [hf, hg] with n hfn hgn
@@ -230,16 +255,13 @@ lemma sum_le_sum_P {s : Finset ℕ} {f g : ℕ → R} (P : StrassenPreorder R)
   revert h
   refine Finset.induction_on s (fun _ => P.le_refl _) fun a s has ih h => by
     rw [sum_insert has, sum_insert has]
-    have h1 : P.le (f a + Finset.sum s f) (f a + Finset.sum s g) := by
-      rw [add_comm (f a), add_comm (f a)]
-      apply P.add_right _ _ (ih (fun i hi => h i (mem_insert_of_mem hi))) (f a)
-    have h2 : P.le (f a + Finset.sum s g) (g a + Finset.sum s g) := by
-      apply P.add_right (f a) (g a) (h a (mem_insert_self a s)) (Finset.sum s g)
-    exact P.le_trans _ _ _ h1 h2
+    have ih' : P.le (Finset.sum s f) (Finset.sum s g) := ih (fun i hi => h i (mem_insert_of_mem hi))
+    apply P.le_trans (f a + Finset.sum s f) (f a + Finset.sum s g)
+    · rw [add_comm (f a), add_comm (f a)]
+      apply P.add_right _ _ ih' (f a)
+    · apply P.add_right (f a) (g a) (h a (mem_insert_self a s)) (Finset.sum s g)
 
 namespace StrassenPreorder
-
-variable {R : Type u} [CommSemiring R]
 
 /-- The asymptotic closure of a Strassen preorder P. -/
 def asymptoticClosure (P : StrassenPreorder R) : StrassenPreorder R where
@@ -284,5 +306,412 @@ def asymptoticClosure (P : StrassenPreorder R) : StrassenPreorder R where
     obtain ⟨n, h⟩ := P.upper_archimedean a
     use n
     exact AsymptoticLe.of_le P h
+
+theorem le_asymptoticClosure (P : StrassenPreorder R) : P ≤ P.asymptoticClosure :=
+  fun _ _ h => AsymptoticLe.of_le P h
+
+/-- Closedness of a Strassen preorder: absorption of the asymptotic closure. -/
+def IsClosed (P : StrassenPreorder R) : Prop :=
+  AsymptoticLe P ≤ P.le
+
+/-- Fixed-point definition of closedness: the asymptotic closure does not add any new relations. -/
+def IsClosedFixedPoint (P : StrassenPreorder R) : Prop :=
+  P.asymptoticClosure ≤ P
+
+theorem isClosed_iff_fixedPoint (P : StrassenPreorder R) :
+    P.IsClosed ↔ P.IsClosedFixedPoint :=
+  Iff.rfl
+
+lemma asymptoticLe_iff_relative_rank_subexponential {P : StrassenPreorder R} {a b : R} (hb : b ≠ 0) :
+    AsymptoticLe P a b ↔ IsSubexponential (fun n => relative_rank P (a ^ n) (b ^ n) (StrassenPreorder.pow_ne_zero P n hb)) := by
+  constructor
+  · rintro ⟨f, hf, hle⟩
+    intro ε hε
+    specialize hf ε hε
+    filter_upwards [hf] with n hn
+    have h_le_f_nat : relative_rank P (a ^ n) (b ^ n) (StrassenPreorder.pow_ne_zero P n hb) ≤ f n := by
+       apply relative_rank_le_of_le P (StrassenPreorder.pow_ne_zero P n hb)
+       exact hle n
+    have h_le_f : (relative_rank P (a ^ n) (b ^ n) (StrassenPreorder.pow_ne_zero P n hb) : ℝ) ≤ (f n : ℝ) := by exact_mod_cast h_le_f_nat
+    exact h_le_f.trans hn
+  · intro h
+    use fun n => relative_rank P (a ^ n) (b ^ n) (StrassenPreorder.pow_ne_zero P n hb)
+    constructor
+    · exact h
+    · intro n
+      exact relative_rank_spec P (a ^ n) (b ^ n) (StrassenPreorder.pow_ne_zero P n hb)
+
+lemma relative_rank_scale_le (P : StrassenPreorder R) (a b : R) (k : ℕ) (hb : b ≠ 0) (hk : (k : R) ≠ 0) :
+    relative_rank P a b hb ≤ k * relative_rank P a (k * b) (StrassenPreorder.mul_ne_zero P hk hb) := by
+  letI := P.instCharZero
+  apply relative_rank_le_of_le P hb
+  let r := relative_rank P a (k * b) (StrassenPreorder.mul_ne_zero P hk hb)
+  have h := relative_rank_spec P a (k * b) (StrassenPreorder.mul_ne_zero P hk hb)
+  -- a ≤ r * (k * b) = r * k * b
+  convert h using 1
+  -- Goal: r * (k * b) = r * k * b
+  push_cast
+  ring
+
+/-- The asymptotic closure of a Strassen preorder is always closed. -/
+theorem asymptoticClosure_isClosed (P : StrassenPreorder R) :
+    P.asymptoticClosure.IsClosed := by
+  intro a b h
+  dsimp [StrassenPreorder.asymptoticClosure] at *
+  letI := P.toNoZeroDivisors
+  letI := P.instCharZero
+  by_cases hb : b = 0
+  · subst hb
+    obtain ⟨f, hf, hle⟩ := h
+    specialize hle 1
+    simp only [pow_one, mul_zero] at hle
+    exact hle
+  · rw [asymptoticLe_iff_relative_rank_subexponential hb]
+    let hb_pow : ∀ n, b ^ n ≠ 0 := fun n => StrassenPreorder.pow_ne_zero P n hb
+    obtain ⟨f, hf, hle⟩ := h
+    let f' := fun n => max 1 (f n)
+    have hf'_ge_1 : ∀ n, 1 ≤ f' n := fun n => le_max_left _ _
+    have hf'_pos : ∀ n, 0 < f' n := fun n => Nat.lt_of_succ_le (hf'_ge_1 n)
+    have hf'_subexp : IsSubexponential f' := by
+      rw [isSubexponential_iff_exists_constant] at hf ⊢
+      intro ε hε
+      obtain ⟨C, hC⟩ := hf ε hε
+      use max 1 C
+      intro n
+      specialize hC n
+      dsimp [f']
+      rw [Nat.cast_max]
+      apply max_le
+      · trans ((1+ε)^(n:ℝ))
+        · simp only [Nat.cast_one]
+          refine Real.one_le_rpow (le_add_of_nonneg_right (le_of_lt hε)) (Nat.cast_nonneg n)
+        · apply le_mul_of_one_le_left (Real.rpow_nonneg (by linarith [hε]) _)
+          exact le_max_left 1 C
+      · apply (hC).trans
+        apply mul_le_mul_of_nonneg_right (le_max_right 1 C) (Real.rpow_nonneg (by linarith) _)
+
+    have h_le_f' : ∀ n, AsymptoticLe P (a^n) (f' n * b^n) := by
+      intro n
+      apply AsymptoticLe.trans P (hle n)
+      apply AsymptoticLe.of_le
+      apply P.mul_right _ _ _ (b^n)
+      dsimp [f']
+      apply (P.nat_order_embedding _ _).mpr (le_max_right 1 (f n))
+
+    let ψ (n : ℕ) := fun m => relative_rank P ((a^n)^m) ((f' n * b^n)^m) (StrassenPreorder.pow_ne_zero P m (StrassenPreorder.mul_ne_zero P (Nat.cast_ne_zero.mpr (Nat.ne_of_gt (hf'_pos n))) (hb_pow n)))
+
+    have h_psi_subexp : ∀ n, IsSubexponential (ψ n) := by
+      intro n
+      rw [← asymptoticLe_iff_relative_rank_subexponential]
+      exact h_le_f' n
+      exact StrassenPreorder.mul_ne_zero P (Nat.cast_ne_zero.mpr (Nat.ne_of_gt (hf'_pos n))) (hb_pow n)
+
+    rw [isSubexponential_iff_exists_constant]
+    intro ε hε
+
+    -- Limit 1: f' n bounds
+    have h1 : ∀ᶠ n in atTop, (f' n : ℝ) ^ (1 / (n : ℝ)) < 1 + ε/2 := by
+      have : ∀ᶠ n in atTop, (f' n : ℝ) ≤ (1 + ε/4) ^ (n : ℝ) := hf'_subexp (ε/4) (by linarith)
+      filter_upwards [this, eventually_gt_atTop 0] with n hn h_pos
+      rw [← Real.rpow_lt_rpow_iff (z := (n : ℝ)) (by apply Real.rpow_nonneg; exact_mod_cast (hf'_pos n).le) (by linarith) (by exact_mod_cast Nat.pos_of_ne_zero (Nat.ne_of_gt h_pos))]
+      rw [← Real.rpow_mul (by exact_mod_cast (hf'_pos n).le)]
+      rw [div_mul_cancel₀ 1 (by have := Nat.ne_of_gt h_pos; exact_mod_cast this)]
+      rw [Real.rpow_one]
+      apply lt_of_le_of_lt hn
+      apply Real.rpow_lt_rpow (by linarith) (by linarith) (by exact_mod_cast Nat.pos_of_ne_zero (Nat.ne_of_gt h_pos))
+
+    -- Limit 2: Powers
+    have h2 : ∀ᶠ (n : ℕ) in atTop, (1 + ε/2) ^ (1 + 1 / (n : ℝ)) < 1 + ε := by
+       have h_base : Tendsto (fun _ : ℕ => 1 + ε / 2) atTop (𝓝 (1 + ε / 2)) := tendsto_const_nhds
+       have h_exp : Tendsto (fun n : ℕ => 1 + 1 / (n : ℝ)) atTop (𝓝 1) := by
+          convert Tendsto.const_add 1 (tendsto_one_div_atTop_nhds_zero_nat (𝕜 := ℝ))
+          simp only [add_zero]
+       have h_lim := Tendsto.rpow h_base h_exp (Or.inl (ne_of_gt (by linarith [hε] : 0 < 1 + ε / 2)))
+       simp only [Real.rpow_one] at h_lim
+       exact h_lim.eventually_lt (tendsto_const_nhds (x := 1+ε)) (by linarith)
+
+    obtain ⟨n, hn_prop⟩ := (h1.and (h2.and (eventually_gt_atTop (0 : ℕ)))).exists
+    rcases hn_prop with ⟨h_fn_root, h_n_large_enough, hn_pos⟩
+
+    obtain ⟨C_psi, h_psi⟩ := isSubexponential_iff_exists_constant.mp (h_psi_subexp n) (ε/2) (half_pos hε)
+
+    let S_r := (Finset.range n).image (fun r => relative_rank P (a^r) (b^r) (hb_pow r))
+    let C_r := S_r.max' (by use relative_rank P (a^0) (b^0) (hb_pow 0); apply mem_image_of_mem; simp [hn_pos])
+
+    use C_psi * (max 1 C_r)
+    intro k
+    let q := k / n
+    let r := k % n
+
+    let φ (m : ℕ) := relative_rank P (a^m) (b^m) (hb_pow m)
+
+    have h_sub : φ k ≤ φ (n*q) * φ r := by
+      dsimp [φ]
+      convert relative_rank_submultiplicative P (a^(n*q)) (a^r) (b^(n*q)) (b^r) (hb_pow (n*q)) (hb_pow r)
+      · rw [← pow_add, Nat.div_add_mod]
+      · rw [← pow_add, Nat.div_add_mod]
+
+    have h_mult : φ (n*q) ≤ (f' n)^q * ψ n q := by
+      let X := (a^n)^q
+      let Y := (b^n)^q
+      let K := (f' n)^q
+      have hK : (K:R) ≠ 0 := by
+         rw [Nat.cast_ne_zero]
+         exact Nat.ne_of_gt (Nat.pow_pos (hf'_pos n))
+      let hY_ne : b^(n*q) ≠ 0 := hb_pow (n*q)
+      have h_rw_a : a^(n*q) = X := by rw [pow_mul]
+      have h_rw_b : b^(n*q) = Y := by rw [pow_mul]
+
+      have hY_ne' : Y ≠ 0 := by rw [← h_rw_b]; exact hY_ne
+
+      have h_lhs : φ (n*q) = relative_rank P X Y hY_ne' := by
+        dsimp [φ, X, Y]
+        simp only [pow_mul]
+
+      have h_rhs_eq : (f' n)^q * ψ n q = K * relative_rank P X (↑K * Y) (mul_ne_zero P hK hY_ne') := by
+        dsimp [ψ, K, X, Y]
+        simp only [mul_pow, Nat.cast_pow]
+
+      rw [h_lhs, h_rhs_eq]
+      exact relative_rank_scale_le P X Y K hY_ne' hK
+
+
+
+    have h_phi_r : (φ r : ℝ) ≤ max 1 C_r := by
+      have hr : r < n := Nat.mod_lt k hn_pos
+      have h_mem : φ r ∈ S_r := Finset.mem_image.mpr ⟨r, Finset.mem_range.mpr hr, rfl⟩
+      exact_mod_cast le_trans (Finset.le_max' S_r _ h_mem) (le_max_right 1 C_r)
+
+    have h_C_nonneg : 0 ≤ C_psi := by
+      have := h_psi 0
+      simp only [Nat.cast_zero, Real.rpow_zero, mul_one] at this
+      exact le_trans (Nat.cast_nonneg _) this
+
+    calc (φ k : ℝ) ≤ (φ (n*q) : ℝ) * (φ r : ℝ) := by exact_mod_cast h_sub
+      _ ≤ ((f' n)^q * ψ n q) * (max 1 C_r) := by
+          apply mul_le_mul _ h_phi_r (by exact_mod_cast Nat.zero_le _) (by exact_mod_cast Nat.zero_le _)
+          exact_mod_cast h_mult
+      _ ≤ ((f' n)^q * (C_psi * (1+ε/2)^q)) * (max 1 C_r) := by
+          apply mul_le_mul_of_nonneg_right _ (by exact_mod_cast Nat.zero_le _)
+          apply mul_le_mul_of_nonneg_left _ (by exact_mod_cast Nat.zero_le _)
+          rw [← Real.rpow_natCast]
+          exact h_psi q
+      _ = (C_psi * max 1 C_r) * ((f' n : ℝ) * (1+ε/2))^q := by
+          simp only [mul_pow, mul_assoc, mul_comm, mul_left_comm]
+      _ ≤ (C_psi * max 1 C_r) * ((1+ε/2)^n * (1+ε/2))^q := by
+          apply mul_le_mul_of_nonneg_left _ (mul_nonneg h_C_nonneg (by exact_mod_cast Nat.zero_le (max 1 C_r)))
+          have h_le : (f' n : ℝ) ≤ (1+ε/2)^n := by
+              rw [← Real.rpow_natCast]
+              have h_n_pos : (0 : ℝ) < n := by exact_mod_cast hn_pos
+              have h_f_nonneg : (0 : ℝ) ≤ f' n := by exact_mod_cast (hf'_pos n).le
+              calc
+                (f' n : ℝ) = ((f' n : ℝ) ^ (1 / (n : ℝ))) ^ (n : ℝ) := by
+                  rw [← Real.rpow_mul h_f_nonneg, one_div, inv_mul_cancel₀ h_n_pos.ne', Real.rpow_one]
+                _ ≤ (1 + ε / 2) ^ (n : ℝ) := by
+                  apply Real.rpow_le_rpow
+                  · apply Real.rpow_nonneg; exact h_f_nonneg
+                  · exact h_fn_root.le
+                  · exact h_n_pos.le
+          have h_base_nonneg : 0 ≤ (f' n : ℝ) * (1 + ε / 2) :=
+              mul_nonneg (by exact_mod_cast (hf'_pos n).le) (by linarith)
+          exact pow_le_pow_left₀ h_base_nonneg (mul_le_mul_of_nonneg_right h_le (by linarith)) q
+      _ = (C_psi * max 1 C_r) * (1+ε/2)^(n*q + q) := by
+          simp only [mul_pow, ← pow_mul, ← pow_add]
+      _ ≤ (C_psi * max 1 C_r) * (1+ε)^(k:ℝ) := by
+          have h_calc : (1+ε/2)^(n*q + q) ≤ (1+ε)^k := calc
+            (1+ε/2)^(n*q + q) = (1+ε/2)^((n+1)*q) := by congr 1; rw [add_mul, one_mul]
+            _ = (1+ε/2)^((↑((n+1)*q)) : ℝ) := by rw [Real.rpow_natCast]
+            _ ≤ (1+ε/2)^(k * (1 + 1 / (n : ℝ))) := by
+                apply Real.rpow_le_rpow_of_exponent_le (by linarith)
+                have h1 : (n:ℝ) * q ≤ k := by
+                  rw [← Nat.cast_mul]
+                  exact_mod_cast Nat.mul_div_le k n
+                have h2 : (q:ℝ) ≤ k / n := by
+                  rw [le_div_iff₀ (by exact_mod_cast hn_pos)]
+                  rw [mul_comm]
+                  exact_mod_cast Nat.mul_div_le k n
+                rw [Nat.cast_mul, Nat.cast_add_one, add_mul, one_mul, mul_one_add, mul_one_div]
+                exact add_le_add h1 h2
+            _ = ((1+ε/2)^(1+1/(n:ℝ)))^k := by
+                rw [mul_comm, Real.rpow_mul (by linarith), Real.rpow_natCast]
+            _ ≤ (1+ε)^k := by
+                have h_base_le : (1 + ε / 2) ^ (1 + 1 / (n : ℝ)) ≤ 1 + ε := h_n_large_enough.le
+                apply pow_le_pow_left₀ (by apply Real.rpow_nonneg; linarith) h_base_le k
+          rw [← Real.rpow_natCast (1+ε) k] at h_calc
+          apply mul_le_mul_of_nonneg_left h_calc
+          apply mul_nonneg h_C_nonneg
+          exact_mod_cast Nat.zero_le (max 1 C_r)
+/-- A Strassen preorder P is maximal if any Strassen preorder extending it is equal to P. -/
+def IsMaximal (P : StrassenPreorder R) : Prop :=
+  ∀ Q : StrassenPreorder R, P ≤ Q → Q = P
+
+/-- Multiplicative cancellation: if ac ≤ bc and c ≠ 0, then a ≤ b in a closed Strassen preorder. -/
+theorem multiplicative_cancellation (P : StrassenPreorder R) (hP : P.IsClosed) {a b c : R} (hc : c ≠ 0)
+    (h : P.le (a * c) (b * c)) : P.le a b := by
+  letI := P.toNoZeroDivisors
+  apply hP
+  rcases P.lower_archimedean c with hc0 | h1c
+  · contradiction
+  obtain ⟨k, hk⟩ := P.upper_archimedean c
+  use fun _ => k
+  constructor
+  · exact IsSubexponential.const k
+  · intro n
+    have h_pow : P.le (a ^ n * c) (b ^ n * c) := by
+      induction n with
+      | zero =>
+        simp only [pow_zero, one_mul]
+        exact P.le_refl _
+      | succ n ih =>
+        rw [pow_succ, pow_succ]
+        apply P.le_trans _ (a ^ n * b * c)
+        · have h' := P.mul_right _ _ h (a ^ n)
+          convert h' using 1 <;> ring
+        · have h' := P.mul_right _ _ ih b
+          convert h' using 1 <;> ring
+    apply P.le_trans (a ^ n) (a ^ n * c)
+    · have h' := P.mul_right 1 c h1c (a ^ n)
+      convert h' using 1 <;> ring
+    · apply P.le_trans _ (b ^ n * c)
+      · exact h_pow
+      · have h' := P.mul_right c k hk (b ^ n)
+        (convert h' using 1; ring)
+
+theorem gap_property (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R} (h_not_ab : ¬ P.le a b) (c : R) :
+    ∃ m : ℕ, 0 < m ∧ ¬ P.le ((m : R) * a) ((m : R) * b + c) := by
+  letI := P.toNoZeroDivisors
+  letI := P.instCharZero
+  by_contra h_all
+  push_neg at h_all
+  cases P.lower_archimedean b with
+  | inl hb0 =>
+    -- Case b = 0
+    subst hb0
+    obtain ⟨kc, hkc⟩ := P.upper_archimedean c
+    cases P.lower_archimedean a with
+    | inl ha0 =>
+      subst ha0; exact h_not_ab (P.le_refl _)
+    | inr h1a =>
+      let m := kc + 1
+      specialize h_all m (Nat.succ_pos _)
+      simp only [mul_zero, zero_add] at h_all
+      have h1 : P.le (m : R) (m * a : R) := by
+        simpa [mul_comm] using P.mul_right 1 a h1a (m : R)
+      have h2 : P.le (m * a : R) (kc : R) := P.le_trans _ _ _ h_all hkc
+      have h_m_le_kc : P.le (m : R) (kc : R) := P.le_trans _ _ _ h1 h2
+      rw [P.nat_order_embedding] at h_m_le_kc
+      exact Nat.not_succ_le_self _ h_m_le_kc
+  | inr h1b =>
+    -- Case b != 0, 1 <= b
+    obtain ⟨kc, hkc⟩ := P.upper_archimedean c
+    cases kc with
+    | zero =>
+      -- Case k = 0, so c ≤ 0
+      simp only [Nat.cast_zero] at hkc
+      specialize h_all 1 Nat.one_pos
+      simp only [Nat.cast_one, one_mul] at h_all
+      have : P.le a b := by
+        apply P.le_trans _ (b + c) _ h_all
+        rw [← add_zero b]
+        have h_add := P.add_right c 0 hkc b
+        simpa [add_comm] using h_add
+      exact h_not_ab this
+    | succ kc' =>
+      let k := kc' + 1
+      have hk_pos : 0 < k := Nat.succ_pos _
+      have h_ckb : P.le c ((k : R) * b) := by
+        apply P.le_trans c (k : R) _ hkc
+        rw [mul_comm]
+        have := P.mul_right 1 b h1b k
+        (convert this using 1; ring)
+      have h_ma_mbk : ∀ m : ℕ, P.le ((m : R) * a) ((m + k : R) * b) := by
+        intro m
+        specialize h_all m
+        by_cases hm0 : m = 0
+        · subst hm0; simp
+          apply P.le_trans 0 c
+          · exact P.all_nonneg c
+          · convert h_ckb using 1
+        · specialize h_all (Nat.pos_of_ne_zero hm0)
+          apply P.le_trans _ ((m : R) * b + c)
+          · exact h_all
+          · apply P.le_trans _ ((m : R) * b + (k : R) * b)
+            · have := P.add_right c ((k : R) * b) h_ckb ((m : R) * b)
+              convert this using 1 <;> ring
+            · (convert P.le_refl ((m : R) * b + (k : R) * b) using 1; ring)
+      have h_na_nb1 : ∀ n : ℕ, P.le ((n : R) * a) ((n + 1 : R) * b) := by
+        intro n
+        let m := n * k
+        have h1 := h_ma_mbk m
+        have h2 : (m + k : ℕ) = (n + 1) * k := by rw [Nat.add_mul, one_mul];
+        have h1' : P.le (((n : R) * a) * (k : R)) (((n + 1 : R) * b) * (k : R)) := by
+          have : (n : R) * a * (k : R) = (m : R) * a := by
+            simp only [m, Nat.cast_mul]
+            ring
+          have this₂ : (n + 1 : R) * b * (k : R) = (m + k : R) * b := by
+             have : ((n + 1) * k : R) = (m + k : R) := by exact_mod_cast h2.symm
+             rw [← this]
+             ring
+          rw [this, this₂]
+          exact h1
+        apply multiplicative_cancellation P hP _ h1'
+        exact Nat.cast_ne_zero.mpr (Nat.ne_of_gt hk_pos)
+      have h_pow : ∀ n : ℕ, P.le (a ^ n) ((n + 1 : ℕ) * b ^ n) := by
+        intro n
+        induction n with
+        | zero =>
+          simp only [pow_zero, zero_add, Nat.cast_one, one_mul]
+          exact P.le_refl 1
+        | succ n ih =>
+          rw [Nat.cast_succ] at ih
+          -- ih : a^n ≤ (↑n + 1) * b^n
+
+          have h_scale : P.le ((↑n + 1 : R) * a) ((↑n + 2 : R) * b) := by
+            have := h_na_nb1 (n+1)
+            rw [Nat.cast_succ] at this
+            (convert this using 2; ring)
+
+          rw [pow_succ a, pow_succ b]
+
+          -- step1 : a^n * a ≤ ((↑n + 1) * b^n) * a
+          have step1 : P.le (a^n * a) ((↑n + 1 : R) * b^n * a) := P.mul_right _ _ ih a
+
+          -- rearrange RHS of step1 to match LHS of step2
+          have step1_rw : ((↑n + 1 : R) * b^n) * a = (↑n + 1 : R) * a * b^n := by ring
+          rw [step1_rw] at step1
+
+          -- step2 : (↑n + 1) * a * b^n ≤ ((↑n + 2) * b) * b^n
+          have step2 : P.le ((↑n + 1 : R) * a * b^n) ((↑n + 2 : R) * b * b^n) := P.mul_right _ _ h_scale (b^n)
+
+          apply P.le_trans _ _ _ step1
+          convert step2 using 1
+          push_cast
+          ring
+      have h_asymp : AsymptoticLe P a b := ⟨fun n => n + 1, IsSubexponential.linear, fun n => by
+        simpa using h_pow n⟩
+      exact h_not_ab (hP a b h_asymp)
+
+/-- Additive cancellation: if a + c ≤ b + c, then a ≤ b in a closed Strassen preorder. -/
+theorem additive_cancellation (P : StrassenPreorder R) (hP : P.IsClosed) {a b c : R}
+    (h : P.le (a + c) (b + c)) : P.le a b := by
+  by_contra h_not_le
+  obtain ⟨m, _, hm_not_le⟩ := gap_property P hP h_not_le c
+  apply hm_not_le
+  have h_ind : ∀ n : ℕ, P.le (n * a) (n * b + c) := by
+    intro n
+    induction n with
+    | zero =>
+      simp only [Nat.cast_zero, zero_mul, zero_add]
+      exact P.all_nonneg c
+    | succ n ih =>
+      simp only [Nat.cast_succ, add_mul, one_mul]
+      apply P.le_trans _ ((↑n * b + c) + a)
+      · exact P.add_right _ _ ih a
+      apply P.le_trans _ ((a + c) + ↑n * b)
+      · convert P.le_refl _ using 1; ring
+      apply P.le_trans _ ((b + c) + ↑n * b)
+      · exact P.add_right _ _ h _
+      · convert P.le_refl _ using 1; ring
+  exact h_ind m
 
 end StrassenPreorder
