@@ -11,6 +11,7 @@ import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import Mathlib.Data.Nat.Choose.Basic
 import Mathlib.Data.Nat.Choose.Cast
 import Mathlib.Order.Zorn
+import Mathlib.Tactic.Ring
 import Mathlib.Analysis.SpecificLimits.Normed
 import AsymptoticSpectra.Submultiplicative
 import AsymptoticSpectra.Rank
@@ -541,9 +542,17 @@ theorem asymptoticClosure_isClosed (P : StrassenPreorder R) :
           apply mul_le_mul_of_nonneg_left h_calc
           apply mul_nonneg h_C_nonneg
           exact_mod_cast Nat.zero_le (max 1 C_r)
-/-- A Strassen preorder P is maximal if any Strassen preorder extending it is equal to P. -/
+
 def IsMaximal (P : StrassenPreorder R) : Prop :=
   ∀ Q : StrassenPreorder R, P ≤ Q → Q = P
+
+/-- A maximal Strassen preorder is closed. -/
+theorem IsMaximal.IsClosed {P : StrassenPreorder R} (hP : P.IsMaximal) : P.IsClosed := by
+  let Q := P.asymptoticClosure
+  have hPQ : P ≤ Q := P.le_asymptoticClosure
+  have hQP : Q = P := hP Q hPQ
+  rw [← hQP]
+  exact P.asymptoticClosure_isClosed
 
 /-- Multiplicative cancellation: if ac ≤ bc and c ≠ 0, then a ≤ b in a closed Strassen preorder. -/
 theorem multiplicative_cancellation (P : StrassenPreorder R) (hP : P.IsClosed) {a b c : R} (hc : c ≠ 0)
@@ -691,6 +700,7 @@ theorem gap_property (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R} (h_not
         simpa using h_pow n⟩
       exact h_not_ab (hP a b h_asymp)
 
+
 /-- Additive cancellation: if a + c ≤ b + c, then a ≤ b in a closed Strassen preorder. -/
 theorem additive_cancellation (P : StrassenPreorder R) (hP : P.IsClosed) {a b c : R}
     (h : P.le (a + c) (b + c)) : P.le a b := by
@@ -713,5 +723,301 @@ theorem additive_cancellation (P : StrassenPreorder R) (hP : P.IsClosed) {a b c 
       · exact P.add_right _ _ h _
       · convert P.le_refl _ using 1; ring
   exact h_ind m
+
+/-- The Strassen preorder obtained by extending P to force b ≤ a.
+    This construction yields a StrassenPreorder provided a ≤ b is not true in P. -/
+def extensionBy (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R} (h_not_le : ¬ P.le a b) : StrassenPreorder R where
+  le x y := ∃ s : R, P.le (x + s * a) (y + s * b)
+  le_refl x := ⟨0, by simp⟩
+  le_trans x y z := by
+    rintro ⟨s1, h1⟩ ⟨s2, h2⟩
+    use s1 + s2
+    letI := P.toNoZeroDivisors
+    letI := P.instCharZero
+    apply additive_cancellation P hP (c := y)
+    have h1' := P.add_right _ _ h1 (y + s2 * a)
+    have h2' := P.add_right _ _ h2 (y + s1 * b)
+    rw [add_comm (y + s2 * a), add_comm (z + s2 * b)] at h2'
+    have h_sum := P.le_trans _ _ _ h1' h2'
+    convert h_sum using 1 <;> ring
+  add_right x y hxy c := by
+    obtain ⟨s, h⟩ := hxy
+    use s
+    have h' := P.add_right _ _ h c
+    convert h' using 1 <;> ring
+  mul_right x y hxy c := by
+    obtain ⟨s, h⟩ := hxy
+    use s * c
+    have h' := P.mul_right _ _ h c
+    convert h' using 1 <;> ring
+  nat_order_embedding n m := by
+    constructor
+    · rintro ⟨s, h⟩
+      by_cases hnm : n ≤ m
+      · exact hnm
+      · exfalso
+        letI := P.instCharZero
+        letI := P.toNoZeroDivisors
+        have h_gt : m < n := Nat.lt_of_not_ge hnm
+        let k := n - m
+        have hk : 1 ≤ k := Nat.one_le_of_lt (Nat.sub_pos_of_lt h_gt)
+        have h_k_rw : (n : R) = (m : R) + (k : R) := by
+          norm_cast
+          rw [Nat.add_comm, Nat.sub_add_cancel (Nat.le_of_lt h_gt)]
+        rw [h_k_rw, add_assoc, add_comm (k : R)] at h
+        have h' : P.le ((s * a + (k : R)) + (m : R)) (s * b + (m : R)) := by
+           rw [add_comm, add_comm (s * b)]
+           exact h
+        have h'' : P.le (s * a + (k : R)) (s * b) := additive_cancellation P hP h'
+        have h''' : P.le (s * a + 1) (s * b) := by
+          apply P.le_trans _ (s * a + (k : R))
+          · have h_1_k : P.le (1 : R) (k : R) := by
+              rw [← Nat.cast_one]
+              exact (P.nat_order_embedding 1 k).mpr hk
+            convert P.add_right 1 (k : R) h_1_k (s * a) using 1 <;> ring
+          · exact h''
+        have hs : s ≠ 0 := by
+          intro hs
+          subst hs
+          simp at h'''
+          rw [← Nat.cast_one, ← Nat.cast_zero, P.nat_order_embedding] at h'''
+          exact Nat.not_succ_le_zero 0 h'''
+        have h_sa_sb : P.le (s * a) (s * b) := by
+          apply P.le_trans (s * a) (s * a + 1) (s * b)
+          · convert P.add_right 0 1 P.zero_le_one (s * a) using 1 <;> ring
+          · exact h'''
+        rw [mul_comm s a, mul_comm s b] at h_sa_sb
+        have h_ab_P := multiplicative_cancellation P hP hs h_sa_sb
+        exact h_not_le h_ab_P
+    · intro hnm
+      use 0
+      simp
+      rw [P.nat_order_embedding]
+      exact hnm
+  lower_archimedean x := by
+    cases P.lower_archimedean x with
+    | inl h => left; exact h
+    | inr h => right; use 0; simp; exact h
+  upper_archimedean x := by
+    obtain ⟨n, h⟩ := P.upper_archimedean x
+    use n, 0
+    simp; exact h
+
+/-- One-step extension lemma: If a ≤ b is not true in a closed Strassen preorder P,
+    there exists an extension Q where b ≤ a and a ≤ b is still not true. -/
+theorem one_step_extension (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R}
+    (h_not_le : ¬ P.le a b) :
+    ∃ Q : StrassenPreorder R, P ≤ Q ∧ Q.le b a ∧ ¬ Q.le a b := by
+  let Q := extensionBy P hP h_not_le
+  use Q
+  constructor
+  · intro x y h; use 0; simp; exact h
+  constructor
+  · use 1; simp; rw [add_comm]; exact P.le_refl _
+  · rintro ⟨s, hs⟩
+    letI := P.toNoZeroDivisors
+    letI := P.instCharZero
+    have h_final : P.le (a * (1 + s)) (b * (1 + s)) := by
+      rw [mul_add, mul_one, mul_add, mul_one, mul_comm a s, mul_comm b s]
+      exact hs
+    have h_ne : 1 + s ≠ 0 := by
+      intro h_zero
+      have h1 : P.le 1 (1 + s) := by
+        convert P.add_right 0 s (P.all_nonneg s) 1 using 1 <;> ring
+      rw [h_zero] at h1
+      rw [← Nat.cast_one, ← Nat.cast_zero, P.nat_order_embedding] at h1
+      exact Nat.not_succ_le_zero 0 h1
+    have h_le_P := multiplicative_cancellation P hP h_ne h_final
+    exact h_not_le h_le_P
+
+/-- The union of a chain of Strassen preorders is a Strassen preorder. -/
+def chain_ub {R : Type u} [CommSemiring R] (c : Set (StrassenPreorder R))
+    (hc : IsChain (· ≤ ·) c) (h_nonempty : c.Nonempty) : StrassenPreorder R where
+  le x y := ∃ P ∈ c, P.le x y
+  le_refl x := by
+    obtain ⟨P, hP⟩ := h_nonempty
+    exact ⟨P, hP, P.le_refl x⟩
+  le_trans x y z := by
+    rintro ⟨P1, hP1, h1⟩ ⟨P2, hP2, h2⟩
+    cases hc.total hP1 hP2 with
+    | inl h => exact ⟨P2, hP2, P2.le_trans _ _ _ (h _ _ h1) h2⟩
+    | inr h => exact ⟨P1, hP1, P1.le_trans _ _ _ h1 (h _ _ h2)⟩
+  add_right x y hxy c' := by
+    obtain ⟨P, hP, h⟩ := hxy
+    exact ⟨P, hP, P.add_right x y h c'⟩
+  mul_right x y hxy c' := by
+    obtain ⟨s, hP, h⟩ := hxy
+    exact ⟨s, hP, s.mul_right x y h c'⟩
+  nat_order_embedding n m := by
+    constructor
+    · rintro ⟨P, hP, h⟩
+      exact (P.nat_order_embedding n m).mp h
+    · intro h
+      obtain ⟨P, hP⟩ := h_nonempty
+      exact ⟨P, hP, (P.nat_order_embedding n m).mpr h⟩
+  lower_archimedean a := by
+    obtain ⟨P, hP⟩ := h_nonempty
+    cases P.lower_archimedean a with
+    | inl h => left; exact h
+    | inr h => right; exact ⟨P, hP, h⟩
+  upper_archimedean a := by
+    obtain ⟨P, hP⟩ := h_nonempty
+    obtain ⟨n, h⟩ := P.upper_archimedean a
+    exact ⟨n, P, hP, h⟩
+
+/-- Total extension lemma: Every Strassen preorder can be extended to a maximal one. -/
+theorem total_extension (P : StrassenPreorder R) :
+    ∃ Q : StrassenPreorder R, P ≤ Q ∧ Q.IsMaximal := by
+  let S := {Q : StrassenPreorder R | P ≤ Q}
+  have h_zorn : ∀ c ⊆ S, IsChain (· ≤ ·) c → ∀ y ∈ c, ∃ ub ∈ S, ∀ a ∈ c, a ≤ ub := by
+    intro c hc_sub hc_chain P₀ hP₀
+    let ub := chain_ub c hc_chain ⟨P₀, hP₀⟩
+    use ub
+    constructor
+    · -- Prove P ≤ ub
+      intro x y hxy
+      exact ⟨P₀, hP₀, hc_sub hP₀ x y hxy⟩
+    · -- Prove ub is upper bound
+      intro Q' hQ' x y hxy
+      exact ⟨Q', hQ', hxy⟩
+  obtain ⟨Q, hPQ, hQ_max⟩ := zorn_le_nonempty₀ S h_zorn P (le_refl P)
+  use Q
+  constructor
+  · exact hPQ
+  · intro Q' hQQ'
+    have hPQ' : Q' ∈ S := le_trans hPQ hQQ'
+    exact le_antisymm (hQ_max.2 hPQ' hQQ') hQQ'
+
+/-- A maximal Strassen preorder is total. -/
+theorem IsMaximal.IsTotal {P : StrassenPreorder R} (hP : P.IsMaximal) : P.IsTotal := by
+  let Q := P.asymptoticClosure
+  have hPQ : P ≤ Q := P.le_asymptoticClosure
+  have hQP : Q = P := hP Q hPQ
+  rw [← hQP]
+  intro a b
+  by_contra h_not
+  push_neg at h_not
+  rcases h_not with ⟨h_not_ab, h_not_ba⟩
+  -- Use one_step_extension to get a larger preorder where b ≤ a.
+  -- This requires the preorder to be closed, which we have for Q.
+  have hQ_closed : Q.IsClosed := P.asymptoticClosure_isClosed
+  obtain ⟨Q1, hQQ1, hQ1_ba, hQ1_not_ab⟩ := one_step_extension Q hQ_closed h_not_ab
+  -- Extend Q1 to a maximal one using total_extension.
+  obtain ⟨Q2, hQ1Q2, hQ2_max⟩ := Q1.total_extension
+  -- Since P is maximal and P = Q ≤ Q1 ≤ Q2, we must have P = Q2.
+  have hPQ2 : P ≤ Q2 := le_trans hPQ (le_trans hQQ1 hQ1Q2)
+  have hPQ2_eq : Q2 = P := hP Q2 hPQ2
+  -- But Q1.le b a implies Q2.le b a, so Q.le b a.
+  have hQ2_ba : Q2.le b a := hQ1Q2 b a hQ1_ba
+  have hQ2_eq_Q : Q2 = Q := hPQ2_eq.trans hQP.symm
+  rw [hQ2_eq_Q] at hQ2_ba
+  exact h_not_ba hQ2_ba
+
+/-- Every closed Strassen preorder is the intersection of all maximal Strassen preorders extending it. -/
+theorem closed_strassen_preorder_eq_intersection_maximal (P : StrassenPreorder R) (hP : P.IsClosed) :
+    ∀ x y : R, P.le x y ↔ ∀ Q : StrassenPreorder R, P ≤ Q → Q.IsMaximal → Q.le x y := by
+  intro x y
+  constructor
+  · intro h Q hPQ _
+    exact hPQ x y h
+  · intro h
+    by_contra h_not
+    -- Use gap property to find n such that ¬ P.le (nx) (ny + 1)
+    obtain ⟨n, hn_pos, h_gap⟩ := P.gap_property hP h_not 1
+    let a := (n : R) * x
+    let b := (n : R) * y + 1
+    -- Extend P to Q1 forced by b ≤ a
+    let Q1 := extensionBy P hP h_gap
+    have hPQ1 : P ≤ Q1 := by
+      intro u v huv; use 0; simp; exact huv
+    have hQ1_ba : Q1.le b a := by
+      use 1; simp [a, b]; rw [add_comm, add_comm ((n : R) * y)]
+      exact P.le_refl _
+    -- Extend Q1 to maximal Q
+    obtain ⟨Q, hQ1Q, hQ_max⟩ := Q1.total_extension
+    have hPQ : P ≤ Q := le_trans hPQ1 hQ1Q
+    have hQ_le := h Q hPQ hQ_max
+    -- In Q, we have ny + 1 ≤ nx (from Q1) and nx ≤ ny (from x ≤ y in Q)
+    have hQ_ba : Q.le b a := hQ1Q b a hQ1_ba
+    have hQ_xy : Q.le a ((n : R) * y) := by
+      dsimp [a]
+      have : ∀ (n : ℕ) (x y : R), Q.le x y → Q.le ((n : R) * x) ((n : R) * y) := by
+        intro n' x' y' h'
+        induction n' with
+        | zero => simp
+        | succ n' ih =>
+          rw [Nat.cast_succ, add_mul, add_mul]
+          apply Q.le_trans _ (↑n' * y' + x')
+          · (convert Q.add_right (↑n' * x') (↑n' * y') ih x' using 1; ring)
+          · convert Q.add_right x' y' h' (↑n' * y') using 1 <;> ring
+      exact this n x y hQ_le
+    have hQ_bad : Q.le b ((n : R) * y) := Q.le_trans _ _ _ hQ_ba hQ_xy
+    -- This implies 1 ≤ 0 in Q
+    dsimp [b] at hQ_bad
+    have hQ_closed := hQ_max.IsClosed
+    have hQ_one_zero : Q.le 1 0 := by
+      have h_cancel : Q.le (1 + (n : R) * y) (0 + (n : R) * y) := by
+        convert hQ_bad using 1 <;> ring
+      exact additive_cancellation Q hQ_closed h_cancel
+    rw [← Nat.cast_one, ← Nat.cast_zero, Q.nat_order_embedding] at hQ_one_zero
+    exact Nat.not_succ_le_zero 0 hQ_one_zero
+
+/-- A Strassen preorder P is maximal if and only if it is total and closed. -/
+theorem isMaximal_iff_isTotal_isClosed (P : StrassenPreorder R) :
+    P.IsMaximal ↔ P.IsTotal ∧ P.IsClosed := by
+  constructor
+  · intro h
+    exact ⟨h.IsTotal, h.IsClosed⟩
+  · rintro ⟨h_total, h_closed⟩ Q hPQ
+    refine _root_.le_antisymm ?_ hPQ
+    intro x y hQ
+    by_contra h_not
+    obtain ⟨n, hn_pos, h_gap⟩ := P.gap_property h_closed h_not 1
+    have h_total_not := (h_total ((n:R)*x) ((n:R)*y + 1)).resolve_left h_gap
+    have hQ_xy : Q.le ((n:R)*x) ((n:R)*y) := by
+       have : ∀ (n' : ℕ) (x' y' : R), Q.le x' y' → Q.le ((n' : R) * x') ((n' : R) * y') := by
+         intro n' x' y' h'
+         induction n' with
+         | zero => simp
+         | succ n' ih =>
+           rw [Nat.cast_succ, add_mul, add_mul]
+           apply Q.le_trans _ (↑n' * y' + x')
+           · (convert Q.add_right (↑n' * x') (↑n' * y') ih x' using 1; ring)
+           · convert Q.add_right x' y' h' (↑n' * y') using 1 <;> ring
+       exact this n x y hQ
+    have hQ_bad : Q.le ((n:R)*y + 1) ((n:R)*y) := Q.le_trans _ _ _ (hPQ _ _ h_total_not) hQ_xy
+    obtain ⟨Q_max, hQQ_max, hQ_max_maximal⟩ := total_extension Q
+    have hQ_max_bad : Q_max.le ((n:R)*y + 1) ((n:R)*y) := hQQ_max _ _ hQ_bad
+    have hQ_max_one_zero : Q_max.le 1 0 := by
+      have h_cancel : Q_max.le (1 + (n : R) * y) (0 + (n : R) * y) := by
+        convert hQ_max_bad using 1 <;> ring
+      exact additive_cancellation Q_max (IsMaximal.IsClosed hQ_max_maximal) h_cancel
+    rw [← Nat.cast_one, ← Nat.cast_zero, Q_max.nat_order_embedding] at hQ_max_one_zero
+    exact Nat.not_succ_le_zero 0 hQ_max_one_zero
+
+/-- If P ≤ Q and Q is closed, then the asymptotic closure of P is also contained in Q. -/
+lemma asymptoticClosure_le_of_isClosed {P Q : StrassenPreorder R} (h : P ≤ Q) (hQ : Q.IsClosed) :
+    asymptoticClosure P ≤ Q := by
+  intro a b hab
+  obtain ⟨f, hf, hle⟩ := hab
+  apply hQ
+  use f, hf
+  intro n
+  exact h _ _ (hle n)
+
+/-- The asymptotic closure of P is the intersection of all total and closed extensions of P. -/
+theorem asymptoticClosure_eq_intersection_total_closed (P : StrassenPreorder R) (x y : R) :
+    (asymptoticClosure P).le x y ↔ ∀ Q : StrassenPreorder R, P ≤ Q → Q.IsTotal → Q.IsClosed → Q.le x y := by
+  let P_star := asymptoticClosure P
+  rw [closed_strassen_preorder_eq_intersection_maximal P_star (asymptoticClosure_isClosed P)]
+  constructor
+  · intro h Q hPQ h_total h_closed
+    apply h Q
+    · exact asymptoticClosure_le_of_isClosed hPQ h_closed
+    · rw [isMaximal_iff_isTotal_isClosed]
+      exact ⟨h_total, h_closed⟩
+  · intro h Q hP_star_Q h_max
+    have h_total_closed : Q.IsTotal ∧ Q.IsClosed := (isMaximal_iff_isTotal_isClosed Q).mp h_max
+    apply h Q (le_trans (le_asymptoticClosure P) hP_star_Q) h_total_closed.1 h_total_closed.2
 
 end StrassenPreorder
