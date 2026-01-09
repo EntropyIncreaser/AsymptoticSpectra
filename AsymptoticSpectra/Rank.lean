@@ -3,6 +3,9 @@ import Mathlib.Data.Nat.Cast.Order.Basic
 import Mathlib.Analysis.SpecialFunctions.Pow.Real
 import AsymptoticSpectra.Structures
 import AsymptoticSpectra.Submultiplicative
+import Mathlib.Order.ConditionallyCompleteLattice.Basic
+import Mathlib.Tactic.Linarith
+import Mathlib.Algebra.Order.Group.Basic
 
 universe u
 
@@ -163,5 +166,290 @@ theorem relative_rank_pow_submultiplicative (P : StrassenPreorder R) (a b : R) (
   have h_bn : b ^ n ≠ 0 := StrassenPreorder.pow_ne_zero P n hb
   have h_sub := relative_rank_submultiplicative P (a^m) (a^n) (b^m) (b^n) h_bm h_bn
   convert h_sub using 2 <;> rw [pow_add]
+
+/-- The set of rational upper bounds for fractional rank. -/
+def rho_set (P : StrassenPreorder R) (a : R) : Set ℝ :=
+  { q : ℝ | ∃ (n m : ℕ), 0 < m ∧ P.le (m * a) n ∧ q = (n : ℝ) / m }
+
+/-- The set of rational lower bounds for fractional subrank. -/
+def kappa_set (P : StrassenPreorder R) (a : R) : Set ℝ :=
+  { q : ℝ | ∃ (n m : ℕ), 0 < m ∧ P.le n (m * a) ∧ q = (n : ℝ) / m }
+
+/-- The fractional rank of an element. -/
+def rho (P : StrassenPreorder R) (a : R) : ℝ := sInf (P.rho_set a)
+
+/-- The fractional subrank of an element. -/
+def kappa (P : StrassenPreorder R) (a : R) : ℝ := sSup (P.kappa_set a)
+
+lemma rho_set_nonempty (P : StrassenPreorder R) (a : R) : (P.rho_set a).Nonempty := by
+  obtain ⟨n, hn⟩ := P.upper_archimedean a
+  refine ⟨(n : ℝ), n, 1, Nat.zero_lt_one, ?_, by simp⟩
+  simpa using hn
+
+lemma rho_set_bddBelow (P : StrassenPreorder R) (a : R) : BddBelow (P.rho_set a) := by
+  use 0
+  rintro q ⟨n, m, hm, _, rfl⟩
+  apply div_nonneg (Nat.cast_nonneg n) (Nat.cast_nonneg m)
+
+lemma kappa_set_nonempty (P : StrassenPreorder R) (a : R) : (P.kappa_set a).Nonempty := by
+  refine ⟨0, 0, 1, Nat.zero_lt_one, ?_, by simp⟩
+  simp; exact P.all_nonneg a
+
+lemma kappa_set_bddAbove (P : StrassenPreorder R) (a : R) : BddAbove (P.kappa_set a) := by
+  obtain ⟨K, hK⟩ := P.upper_archimedean a
+  use K
+  rintro q ⟨n, m, hm, h, rfl⟩
+  rw [div_le_iff₀ (Nat.cast_pos.mpr hm)]
+  norm_cast
+  have h_ma_mK : P.le ((m : R) * a) ((m : R) * (K : R)) := by
+    rw [mul_comm, mul_comm (m : R) (K : R)]
+    apply P.mul_right a (K : R) hK (m : R)
+  rw [mul_comm K m]
+  apply (P.nat_order_embedding n (m * K)).mp
+  rw [Nat.cast_mul]
+  exact P.le_trans _ _ _ h h_ma_mK
+
+lemma sInf_add_sInf_le {S1 S2 S3 : Set ℝ} (h1 : S1.Nonempty) (h2 : S2.Nonempty)
+    (H : ∀ x ∈ S1, ∀ y ∈ S2, sInf S3 ≤ x + y) : sInf S3 ≤ sInf S1 + sInf S2 := by
+  have h_y : ∀ y ∈ S2, sInf S3 - y ≤ sInf S1 := by
+    intro y hy
+    apply le_csInf h1
+    intro x hx
+    linarith [H x hx y hy]
+  have h_x : sInf S3 - sInf S1 ≤ sInf S2 := by
+    apply le_csInf h2
+    intro y hy
+    linarith [h_y y hy]
+  linarith
+
+lemma sInf_mul_sInf_le {S1 S2 S3 : Set ℝ} (h1 : S1.Nonempty) (hb1 : BddBelow S1) (pos1 : ∀ x ∈ S1, 0 ≤ x)
+    (h2 : S2.Nonempty) (pos2 : ∀ x ∈ S2, 0 ≤ x)
+    (H : ∀ x ∈ S1, ∀ y ∈ S2, sInf S3 ≤ x * y) : sInf S3 ≤ sInf S1 * sInf S2 := by
+  have h_inf1 : 0 ≤ sInf S1 := le_csInf h1 pos1
+  by_cases h01 : sInf S1 = 0
+  · rw [h01, zero_mul]
+    apply le_of_forall_pos_le_add
+    intro ε hε
+    obtain ⟨y, hy⟩ := h2
+    have h_nonneg_y : 0 ≤ y := pos2 y hy
+    by_cases hy0 : y = 0
+    · obtain ⟨x, hx⟩ := h1
+      have := H x hx y hy
+      rw [hy0, mul_zero] at this
+      linarith
+    · have : sInf S1 < sInf S1 + ε / y := lt_add_of_pos_right _ (div_pos hε (lt_of_le_of_ne h_nonneg_y (Ne.symm hy0)))
+      obtain ⟨x, hx, hx_lt⟩ := (csInf_lt_iff hb1 h1).mp this
+      calc sInf S3 ≤ x * y := H x hx y hy
+        _ ≤ (sInf S1 + ε / y) * y := mul_le_mul_of_nonneg_right hx_lt.le h_nonneg_y
+        _ = ε := by field_simp [hy0]; rw [h01]; ring
+        _ ≤ 0 + ε := by simp
+  · have h1_pos : 0 < sInf S1 := lt_of_le_of_ne h_inf1 (Ne.symm h01)
+    have h_bound : ∀ y ∈ S2, sInf S3 ≤ y * sInf S1 := by
+      intro y hy
+      by_cases hy0 : y = 0
+      · rw [hy0, zero_mul]; obtain ⟨x, hx⟩ := h1; have := H x hx y hy; rwa [hy0, mul_zero] at this
+      · have : 0 < y := lt_of_le_of_ne (pos2 y hy) (Ne.symm hy0)
+        rw [mul_comm y]
+        apply (div_le_iff₀ this).mp
+        apply le_csInf h1
+        intro x hx
+        apply (div_le_iff₀ this).mpr
+        exact H x hx y hy
+    have : ∀ y ∈ S2, sInf S3 / sInf S1 ≤ y := by
+      intro y hy
+      exact (div_le_iff₀ h1_pos).mpr (h_bound y hy)
+    have : sInf S3 / sInf S1 ≤ sInf S2 := le_csInf h2 this
+    rw [mul_comm]
+    exact (div_le_iff₀ h1_pos).mp this
+
+lemma csSup_add_le_csSup {S1 S2 S3 : Set ℝ} (h1 : S1.Nonempty) (h2 : S2.Nonempty)
+    (H : ∀ x ∈ S1, ∀ y ∈ S2, x + y ≤ sSup S3) : sSup S1 + sSup S2 ≤ sSup S3 := by
+  have h_y : ∀ y ∈ S2, sSup S1 ≤ sSup S3 - y := by
+    intro y hy
+    apply csSup_le h1
+    intro x hx
+    linarith [H x hx y hy]
+  have h_x : sSup S2 ≤ sSup S3 - sSup S1 := by
+    apply csSup_le h2
+    intro y hy
+    linarith [h_y y hy]
+  linarith
+
+lemma csSup_mul_le_csSup {S1 S2 S3 : Set ℝ} (h1 : S1.Nonempty) (hb1 : BddAbove S1) (pos1 : ∀ x ∈ S1, 0 ≤ x)
+    (h2 : S2.Nonempty) (pos2 : ∀ x ∈ S2, 0 ≤ x)
+    (H : ∀ x ∈ S1, ∀ y ∈ S2, x * y ≤ sSup S3) : sSup S1 * sSup S2 ≤ sSup S3 := by
+  have h_nonneg_sup1 : 0 ≤ sSup S1 := (pos1 h1.some h1.some_mem).trans (le_csSup hb1 h1.some_mem)
+  by_cases h01 : sSup S1 = 0
+  · rw [h01, zero_mul]
+    obtain ⟨x, hx⟩ := h1
+    obtain ⟨y, hy⟩ := h2
+    have : 0 ≤ x * y := mul_nonneg (pos1 x hx) (pos2 y hy)
+    exact this.trans (H x hx y hy)
+  · have h1_pos : 0 < sSup S1 := lt_of_le_of_ne h_nonneg_sup1 (Ne.symm h01)
+    have h_bound : ∀ y ∈ S2, y * sSup S1 ≤ sSup S3 := by
+        intro y hy
+        by_cases hy0 : y = 0
+        · rw [hy0, zero_mul]; obtain ⟨x, hx⟩ := h1; have := H x hx y hy; rwa [hy0, mul_zero] at this
+        · have hy_pos : 0 < y := lt_of_le_of_ne (pos2 y hy) (Ne.symm hy0)
+          rw [mul_comm y]
+          apply (le_div_iff₀ hy_pos).mp
+          apply csSup_le h1
+          intro x hx
+          apply (le_div_iff₀ hy_pos).mpr
+          exact H x hx y hy
+    have : ∀ y ∈ S2, y ≤ sSup S3 / sSup S1 := by
+      intro y hy
+      exact (le_div_iff₀ h1_pos).mpr (h_bound y hy)
+    have : sSup S2 ≤ sSup S3 / sSup S1 := csSup_le h2 this
+    rw [mul_comm]
+    exact (le_div_iff₀ h1_pos).mp this
+
+theorem rho_monotone (P : StrassenPreorder R) {a b : R} (h : P.le a b) : P.rho a ≤ P.rho b := by
+  apply le_csInf (P.rho_set_nonempty b)
+  rintro q ⟨n, m, hm, hb, rfl⟩
+  apply csInf_le (P.rho_set_bddBelow a)
+  refine ⟨n, m, hm, ?_, rfl⟩
+  have h_ma_mb : P.le ((m : R) * a) ((m : R) * b) := by
+    rw [mul_comm, mul_comm (m : R) b]
+    apply P.mul_right a b h (m : R)
+  exact P.le_trans _ _ _ h_ma_mb hb
+
+theorem rho_nat_cast (P : StrassenPreorder R) (n : ℕ) : P.rho n = n := by
+  apply le_antisymm
+  · apply csInf_le (P.rho_set_bddBelow n)
+    refine ⟨n, 1, Nat.zero_lt_one, ?_, by simp⟩
+    simp only [Nat.cast_one, one_mul, P.le_refl]
+  · apply le_csInf (P.rho_set_nonempty n)
+    rintro q ⟨k, m, hm, h, rfl⟩
+    rw [le_div_iff₀ (Nat.cast_pos.mpr hm)]
+    norm_cast at h
+    rw [Nat.mul_comm] at h
+    norm_cast
+    exact (P.nat_order_embedding _ _).mp h
+
+theorem rho_add_le (P : StrassenPreorder R) (a b : R) : P.rho (a + b) ≤ P.rho a + P.rho b := by
+  apply sInf_add_sInf_le (P.rho_set_nonempty a) (P.rho_set_nonempty b)
+  rintro q1 ⟨n1, m1, hm1, ha, rfl⟩ q2 ⟨n2, m2, hm2, hb, rfl⟩
+  apply csInf_le (P.rho_set_bddBelow _)
+  refine ⟨m2 * n1 + m1 * n2, m1 * m2, Nat.mul_pos hm1 hm2, ?_, ?_⟩
+  · have h_eq1 : (↑(m1 * m2) * (a + b) : R) = (↑m1 * a) * ↑m2 + (↑m2 * b) * ↑m1 := by push_cast; ring
+    rw [h_eq1]
+    have hA : P.le (↑m1 * a * ↑m2) (↑n1 * ↑m2) := by
+      apply P.mul_right (↑m1 * a) (↑n1) ha
+    have hB : P.le (↑m2 * b * ↑m1) ((n2 : R) * m1) := by
+      apply P.mul_right
+      exact hb
+    letI := P.toPreorder
+    calc
+      P.le ((↑m1 * a) * ↑m2 + (↑m2 * b) * ↑m1) (↑n1 * ↑m2 + (↑m2 * b) * ↑m1) := by
+        apply P.add_right; exact hA
+      _ ≤ ↑n1 * ↑m2 + (n2 : R) * m1 := by
+        have h_comm : ↑n1 * ↑m2 + ↑m2 * b * ↑m1 = ↑m2 * b * ↑m1 + ↑n1 * ↑m2 := by ring
+        have h_comm2 : ↑n1 * ↑m2 + (n2 : R) * m1 = (n2 : R) * m1 + ↑n1 * ↑m2 := by ring
+        rw [h_comm, h_comm2]
+        apply P.add_right; exact hB
+      _ ≤ ↑(m2 * n1 + m1 * n2) := by
+        apply le_of_eq; push_cast; ring
+  · push_cast; field_simp; try ring
+
+theorem rho_mul_le (P : StrassenPreorder R) (a b : R) : P.rho (a * b) ≤ P.rho a * P.rho b := by
+  let Sa := P.rho_set a
+  let Sb := P.rho_set b
+  have posa : ∀ q ∈ Sa, 0 ≤ q := by rintro q ⟨n, m, hm, h, rfl⟩; apply div_nonneg <;> exact Nat.cast_nonneg _
+  have posb : ∀ q ∈ Sb, 0 ≤ q := by rintro q ⟨n, m, hm, h, rfl⟩; apply div_nonneg <;> exact Nat.cast_nonneg _
+  apply sInf_mul_sInf_le (P.rho_set_nonempty a) (P.rho_set_bddBelow a) posa (P.rho_set_nonempty b) posb
+  rintro q1 ⟨n1, m1, hm1, ha, rfl⟩ q2 ⟨n2, m2, hm2, hb, rfl⟩
+  apply csInf_le (P.rho_set_bddBelow _)
+  refine ⟨n1 * n2, m1 * m2, Nat.mul_pos hm1 hm2, ?_, ?_⟩
+  · letI := P.toPreorder
+    have h_eq : ↑(m1 * m2) * (a * b) = (↑m1 * a) * (↑m2 * b) := by push_cast; ring
+    rw [h_eq]
+    calc
+      P.le ((↑m1 * a) * (↑m2 * b)) (↑n1 * (↑m2 * b)) := by
+        exact P.mul_right (↑m1 * a) (↑n1) ha (↑m2 * b)
+      _ ≤ ↑n1 * ↑n2 := by
+        have h_swap : ↑n1 * (↑m2 * b) = (↑m2 * b) * ↑n1 := by ring
+        rw [h_swap]
+        have h_main : P.le ((↑m2 * b) * ↑n1) (↑n2 * ↑n1) := P.mul_right (↑m2 * b) (↑n2) hb (↑n1)
+        have h_comm_res : (↑n2 : R) * ↑n1 = ↑n1 * ↑n2 := by ring
+        rw [← h_comm_res]
+        exact h_main
+      _ ≤ ↑(n1 * n2) := by
+        apply le_of_eq; push_cast; rfl
+  · push_cast; field_simp; try ring
+
+theorem kappa_monotone (P : StrassenPreorder R) {a b : R} (h : P.le a b) : P.kappa a ≤ P.kappa b := by
+  apply csSup_le (P.kappa_set_nonempty a)
+  rintro q ⟨n, m, hm, ha, rfl⟩
+  apply le_csSup (P.kappa_set_bddAbove b)
+  refine ⟨n, m, hm, ?_, rfl⟩
+  have h_ma : P.le ((m : R) * a) ((m : R) * b) := by
+    rw [mul_comm, mul_comm (m : R) b]
+    apply P.mul_right a b h (m : R)
+  exact P.le_trans _ _ _ ha h_ma
+
+theorem kappa_nat_cast (P : StrassenPreorder R) (n : ℕ) : P.kappa n = n := by
+  apply le_antisymm
+  · apply csSup_le (P.kappa_set_nonempty n)
+    rintro q ⟨k, m, hm, h, rfl⟩
+    rw [div_le_iff₀ (Nat.cast_pos.mpr hm)]
+    norm_cast at h
+    rw [Nat.mul_comm] at h
+    norm_cast
+    exact (P.nat_order_embedding _ _).mp h
+  · apply le_csSup (P.kappa_set_bddAbove n)
+    refine ⟨n, 1, Nat.zero_lt_one, ?_, by simp⟩
+    simp only [Nat.cast_one, one_mul, P.le_refl]
+
+theorem kappa_add_ge (P : StrassenPreorder R) (a b : R) : P.kappa a + P.kappa b ≤ P.kappa (a + b) := by
+  apply csSup_add_le_csSup (P.kappa_set_nonempty a) (P.kappa_set_nonempty b)
+  rintro q1 ⟨n1, m1, hm1, ha, rfl⟩ q2 ⟨n2, m2, hm2, hb, rfl⟩
+  apply le_csSup (P.kappa_set_bddAbove _)
+  refine ⟨m2 * n1 + m1 * n2, m1 * m2, Nat.mul_pos hm1 hm2, ?_, ?_⟩
+  · have h_eq1 : (↑(m1 * m2) * (a + b) : R) = (↑m1 * a) * ↑m2 + (↑m2 * b) * ↑m1 := by push_cast; ring
+    rw [h_eq1]
+    push_cast
+    letI := P.toPreorder
+    have hA : (↑m2 : R) * ↑n1 ≤ ↑m1 * a * ↑m2 := by
+      have h1 : (↑m2 : R) * ↑n1 = ↑n1 * ↑m2 := by ring
+      have h2 : ↑m1 * a * ↑m2 = (↑m1 * a) * ↑m2 := by ring
+      rw [h1, h2]
+      apply P.mul_right; exact ha
+    have hB : (↑m1 : R) * ↑n2 ≤ ↑m2 * b * ↑m1 := by
+      have h1 : (↑m1 : R) * ↑n2 = ↑n2 * ↑m1 := by ring
+      have h2 : ↑m2 * b * ↑m1 = (↑m2 * b) * ↑m1 := by ring
+      rw [h1, h2]
+      apply P.mul_right; exact hb
+    calc
+      P.le (↑m2 * ↑n1 + ↑m1 * ↑n2) (↑m1 * a * ↑m2 + ↑m1 * ↑n2) := by
+        apply P.add_right; exact hA
+      _ ≤ ↑m1 * a * ↑m2 + ↑m2 * b * ↑m1 := by
+        have h_comm1 : ↑m1 * a * ↑m2 + ↑m1 * ↑n2 = ↑m1 * ↑n2 + ↑m1 * a * ↑m2 := by ring
+        have h_comm2 : ↑m1 * a * ↑m2 + ↑m2 * b * ↑m1 = ↑m2 * b * ↑m1 + ↑m1 * a * ↑m2 := by ring
+        rw [h_comm1, h_comm2]
+        apply P.add_right; exact hB
+  · push_cast; field_simp; try ring
+
+theorem kappa_mul_ge (P : StrassenPreorder R) (a b : R) : P.kappa a * P.kappa b ≤ P.kappa (a * b) := by
+  let Sa := P.kappa_set a
+  let Sb := P.kappa_set b
+  have posa : ∀ q ∈ Sa, 0 ≤ q := by rintro q ⟨n, m, hm, h, rfl⟩; apply div_nonneg <;> exact Nat.cast_nonneg _
+  have posb : ∀ q ∈ Sb, 0 ≤ q := by rintro q ⟨n, m, hm, h, rfl⟩; apply div_nonneg <;> exact Nat.cast_nonneg _
+  apply csSup_mul_le_csSup (P.kappa_set_nonempty a) (P.kappa_set_bddAbove a) posa (P.kappa_set_nonempty b) posb
+  rintro q1 ⟨n1, m1, hm1, ha, rfl⟩ q2 ⟨n2, m2, hm2, hb, rfl⟩
+  apply le_csSup (P.kappa_set_bddAbove _)
+  refine ⟨n1 * n2, m1 * m2, Nat.mul_pos hm1 hm2, ?_, ?_⟩
+  · letI := P.toPreorder
+    push_cast
+    calc
+      P.le (↑n1 * ↑n2) (↑m1 * a * ↑n2) := by
+        apply P.mul_right; exact ha
+      _ ≤ ((↑m2 * b) * (↑m1 * a)) := by
+        have h_comm : ↑m1 * a * ↑n2 = ↑n2 * (↑m1 * a) := by ring
+        rw [h_comm]
+        apply P.mul_right; exact hb
+      _ ≤ (↑m1 * ↑m2 * (a * b)) := by
+        apply le_of_eq; ring
+  · push_cast; field_simp; try ring
 
 end StrassenPreorder
