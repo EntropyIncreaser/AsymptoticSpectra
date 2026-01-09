@@ -6,6 +6,8 @@ import AsymptoticSpectra.Submultiplicative
 import Mathlib.Order.ConditionallyCompleteLattice.Basic
 import Mathlib.Tactic.Linarith
 import Mathlib.Algebra.Order.Group.Basic
+import Mathlib.Data.Rat.Cast.Order
+import Mathlib.Algebra.Order.Field.Basic
 
 universe u
 
@@ -424,9 +426,7 @@ theorem kappa_add_ge (P : StrassenPreorder R) (a b : R) : P.kappa a + P.kappa b 
       P.le (↑m2 * ↑n1 + ↑m1 * ↑n2) (↑m1 * a * ↑m2 + ↑m1 * ↑n2) := by
         apply P.add_right; exact hA
       _ ≤ ↑m1 * a * ↑m2 + ↑m2 * b * ↑m1 := by
-        have h_comm1 : ↑m1 * a * ↑m2 + ↑m1 * ↑n2 = ↑m1 * ↑n2 + ↑m1 * a * ↑m2 := by ring
-        have h_comm2 : ↑m1 * a * ↑m2 + ↑m2 * b * ↑m1 = ↑m2 * b * ↑m1 + ↑m1 * a * ↑m2 := by ring
-        rw [h_comm1, h_comm2]
+        rw [add_comm, add_comm (↑m1 * a * ↑m2)]
         apply P.add_right; exact hB
   · push_cast; field_simp; try ring
 
@@ -451,5 +451,102 @@ theorem kappa_mul_ge (P : StrassenPreorder R) (a b : R) : P.kappa a * P.kappa b 
       _ ≤ (↑m1 * ↑m2 * (a * b)) := by
         apply le_of_eq; ring
   · push_cast; field_simp; try ring
+
+theorem kappa_le_rho (P : StrassenPreorder R) (a : R) : P.kappa a ≤ P.rho a := by
+  apply csSup_le (P.kappa_set_nonempty a)
+  rintro qk ⟨nk, mk, hmk, hk, rfl⟩
+  apply le_csInf (P.rho_set_nonempty a)
+  rintro qr ⟨nr, mr, hmr, hr, rfl⟩
+  have hmk_pos : 0 < (mk : ℝ) := Nat.cast_pos.mpr hmk
+  have hmr_pos : 0 < (mr : ℝ) := Nat.cast_pos.mpr hmr
+  rw [div_le_div_iff₀ hmk_pos hmr_pos]
+  norm_cast
+  letI := P.toPreorder
+  -- Goal: nk * mr ≤ mk * nr
+  have h1 : P.le (↑nk * ↑mr) (↑mk * a * ↑mr) := P.mul_right ↑nk (↑mk * a) hk ↑mr
+  have h2 : P.le (↑mk * (↑mr * a)) (↑mk * ↑nr) := by
+    apply P.le_trans _ ((↑mr * a) * ↑mk)
+    · apply le_of_eq; ring
+    · apply P.le_trans _ (↑nr * ↑mk)
+      · exact P.mul_right (↑mr * a) ↑nr hr ↑mk
+      · apply le_of_eq; ring
+  have h_goal : P.le (↑nk * ↑mr) (↑mk * ↑nr) := by
+    have h_eq : (↑mk : R) * a * ↑mr = ↑mk * (↑mr * a) := by ring
+    rw [h_eq] at h1
+    exact P.le_trans _ _ _ h1 h2
+  rw [← Nat.cast_mul, ← Nat.cast_mul, P.nat_order_embedding] at h_goal
+  rw [Nat.mul_comm nr mk]
+  exact h_goal
+
+theorem rho_eq_kappa_of_total (P : StrassenPreorder R) (total : P.IsTotal) (a : R) :
+    P.rho a = P.kappa a := by
+  apply le_antisymm
+  · -- rho a ≤ kappa a
+    by_contra h
+    have h_lt : P.kappa a < P.rho a := not_le.mp h
+    obtain ⟨q, hq_kappa, hq_rho⟩ := exists_rat_btwn h_lt
+    let n := q.num.natAbs
+    let m := q.den
+    have hm : 0 < m := q.den_pos
+    have hq_pos : 0 ≤ q := by
+      have h0 : 0 ≤ P.kappa a := by
+        apply le_csSup (P.kappa_set_bddAbove a)
+        refine ⟨0, 1, Nat.zero_lt_one, ?_, by simp⟩
+        simpa using P.all_nonneg a
+      exact Rat.cast_nonneg.mp (h0.trans hq_kappa.le)
+    have hq_eq : (q : ℝ) = (n : ℝ) / m := by
+      rw [Rat.cast_def]
+      field_simp [hm.ne', q.den_pos.ne']
+      norm_cast
+      have : q.num = (n : ℤ) := (Int.natAbs_of_nonneg (Rat.num_nonneg.mpr hq_pos)).symm
+      rw [this, Int.mul_comm]
+      rfl
+    have h_rho_imp : P.le (↑m * a) ↑n → False := by
+      intro h_le
+      have mem : (n : ℝ) / m ∈ P.rho_set a := ⟨n, m, hm, h_le, rfl⟩
+      have : P.rho a ≤ (n : ℝ) / m := csInf_le (P.rho_set_bddBelow a) mem
+      rw [← hq_eq] at this
+      linarith
+    have h_kappa_imp : P.le ↑n (↑m * a) → False := by
+      intro h_le
+      have mem : (n : ℝ) / m ∈ P.kappa_set a := ⟨n, m, hm, h_le, rfl⟩
+      have : (n : ℝ) / m ≤ P.kappa a := le_csSup (P.kappa_set_bddAbove a) mem
+      rw [← hq_eq] at this
+      linarith
+    -- Totality contradiction
+    cases total (↑m * a) ↑n with
+    | inl h_tot => exact h_rho_imp h_tot
+    | inr h_tot => exact h_kappa_imp h_tot
+  · exact P.kappa_le_rho a
+
+theorem rho_add (P : StrassenPreorder R) (total : P.IsTotal) (a b : R) :
+    P.rho (a + b) = P.rho a + P.rho b := by
+  apply le_antisymm
+  · exact P.rho_add_le a b
+  · rw [P.rho_eq_kappa_of_total total a, P.rho_eq_kappa_of_total total b, P.rho_eq_kappa_of_total total (a + b)]
+    exact P.kappa_add_ge a b
+
+theorem rho_mul (P : StrassenPreorder R) (total : P.IsTotal) (a b : R) :
+    P.rho (a * b) = P.rho a * P.rho b := by
+  apply le_antisymm
+  · exact P.rho_mul_le a b
+  · rw [P.rho_eq_kappa_of_total total a, P.rho_eq_kappa_of_total total b, P.rho_eq_kappa_of_total total (a * b)]
+    exact P.kappa_mul_ge a b
+
+theorem rho_zero (P : StrassenPreorder R) : P.rho 0 = 0 := by
+  rw [← Nat.cast_zero, P.rho_nat_cast]
+  simp
+
+theorem rho_one (P : StrassenPreorder R) : P.rho 1 = 1 := by
+  rw [← Nat.cast_one, P.rho_nat_cast]
+  simp
+
+/-- The fractional rank as a ring homomorphism for total preorders. -/
+def rho_toRingHom (P : StrassenPreorder R) (total : P.IsTotal) : R →+* ℝ where
+  toFun := P.rho
+  map_one' := P.rho_one
+  map_mul' := P.rho_mul total
+  map_zero' := P.rho_zero
+  map_add' := P.rho_add total
 
 end StrassenPreorder

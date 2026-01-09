@@ -1,5 +1,6 @@
 import Mathlib.Algebra.Order.Ring.Defs
 import Mathlib.Algebra.CharZero.Defs
+import Mathlib.Tactic.Ext
 
 universe u
 
@@ -42,6 +43,10 @@ instance : PartialOrder (StrassenPreorder α) where
     have h : P.toSemiringPreorder = Q.toSemiringPreorder := le_antisymm hPQ hQP
     cases P; cases Q
     congr
+
+@[ext]
+theorem ext {P Q : StrassenPreorder α} (h : ∀ a b, P.le a b ↔ Q.le a b) : P = Q :=
+  le_antisymm (fun a b => (h a b).mp) (fun a b => (h a b).mpr)
 
 variable (P : StrassenPreorder α)
 

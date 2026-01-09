@@ -724,6 +724,26 @@ theorem additive_cancellation (P : StrassenPreorder R) (hP : P.IsClosed) {a b c 
       · convert P.le_refl _ using 1; ring
   exact h_ind m
 
+/-- In a total and closed Strassen preorder, the fractional rank reflects the order. -/
+theorem rho_reflects_le (P : StrassenPreorder R) (h_total : P.IsTotal) (h_closed : P.IsClosed) (a b : R) :
+    P.rho a ≤ P.rho b ↔ P.le a b := by
+  constructor
+  · intro h_rho
+    by_contra h_not_le
+    obtain ⟨m, hm_pos, hm_not_le⟩ := gap_property P h_closed h_not_le 1
+    -- Totality gives: m * b + 1 ≤ m * a
+    cases h_total (m * a) (m * b + 1) with
+    | inl h1 => exact hm_not_le h1
+    | inr h1 =>
+      -- Then rho (m * b + 1) ≤ rho (m * a)
+      have h_rho_le_m := P.rho_monotone h1
+      rw [P.rho_add h_total, P.rho_mul h_total, P.rho_mul h_total] at h_rho_le_m
+      rw [P.rho_one, P.rho_nat_cast] at h_rho_le_m
+      have h_m_pos : 0 < (m : ℝ) := Nat.cast_pos.mpr hm_pos
+      clear h_not_le hm_not_le h1
+      nlinarith [h_rho, h_rho_le_m, h_m_pos]
+  · exact P.rho_monotone
+
 /-- The Strassen preorder obtained by extending P to force b ≤ a.
     This construction yields a StrassenPreorder provided a ≤ b is not true in P. -/
 def extensionBy (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R} (h_not_le : ¬ P.le a b) : StrassenPreorder R where
