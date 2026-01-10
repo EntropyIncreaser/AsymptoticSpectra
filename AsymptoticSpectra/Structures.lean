@@ -8,6 +8,7 @@ universe u
 structure SemiringPreorder (α : Type u) [CommSemiring α] extends Preorder α where
   add_right : ∀ a b, le a b → ∀ c, le (a + c) (b + c)
   mul_right : ∀ a b, le a b → ∀ c, le (a * c) (b * c)
+  zero_le   : ∀ a : α, le 0 a
 
 /-- Bundled Strassen preorder on a commutative semiring. -/
 structure StrassenPreorder (α : Type u) [CommSemiring α] extends SemiringPreorder α where
@@ -50,21 +51,11 @@ theorem ext {P Q : StrassenPreorder α} (h : ∀ a b, P.le a b ↔ Q.le a b) : P
 
 variable (P : StrassenPreorder α)
 
-theorem zero_le_one : P.le 0 1 := by
-  rw [← Nat.cast_zero, ← Nat.cast_one, P.nat_order_embedding]
-  exact Nat.le_succ 0
-
 theorem zero_lt_one : P.le 0 1 ∧ ¬ P.le 1 0 := by
   constructor
-  · exact P.zero_le_one
+  · exact P.zero_le 1
   · rw [← Nat.cast_one, ← Nat.cast_zero, P.nat_order_embedding]
     exact Nat.not_succ_le_zero 0
-
-theorem all_nonneg (a : α) : P.le 0 a := by
-  cases P.lower_archimedean a with
-  | inl h => rw [h]; exact P.le_refl 0
-  | inr h =>
-    exact P.le_trans 0 1 a P.zero_le_one h
 
 /-- Create a local Strassen context by activating the instances. -/
 def activate (P : StrassenPreorder α) (f : [Preorder α] → [CovariantClass α α (· + ·) (· ≤ ·)] → [PosMulMono α] → [MulPosMono α] → β) : β :=

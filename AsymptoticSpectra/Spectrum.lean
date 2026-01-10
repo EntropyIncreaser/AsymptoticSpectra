@@ -20,9 +20,12 @@ noncomputable section
 
 open Classical Set Filter Topology
 
-/-- A point in the asymptotic spectrum is a monotone semiring homomorphism to ℝ. -/
-structure AsymptoticSpectrumPoint (R : Type u) [CommSemiring R] (P : StrassenPreorder R) extends R →+* ℝ where
+structure SemiringSpectrumPoint (R : Type u) [CommSemiring R] (P : SemiringPreorder R) extends R →+* ℝ where
   monotone' : ∀ {a b : R}, P.le a b → toRingHom a ≤ toRingHom b
+
+/-- A point in the asymptotic spectrum is a monotone semiring homomorphism to ℝ. -/
+abbrev AsymptoticSpectrumPoint (R : Type u) [CommSemiring R] (P : StrassenPreorder R) :=
+  SemiringSpectrumPoint R (P.toSemiringPreorder)
 
 namespace StrassenPreorder
 
@@ -75,7 +78,7 @@ instance (P : StrassenPreorder R) : CompactSpace (SpectrumBox P) :=
 def toBox {P : StrassenPreorder R} (ϕ : AsymptoticSpectrumPoint R P) : SpectrumBox P :=
   fun a => ⟨ϕ a, by
     constructor
-    · have h0 : P.le 0 a := P.all_nonneg a
+    · have h0 : P.le 0 a := P.zero_le a
       have := ϕ.monotone' h0
       rw [map_zero (ϕ.toRingHom)] at this
       exact this
@@ -114,8 +117,9 @@ def toStrassenPreorder {R : Type u} [CommSemiring R] {P : StrassenPreorder R}
     have h0c : 0 ≤ ϕ c := by
       rw [← map_zero (ϕ.toRingHom)]
       apply ϕ.monotone'
-      exact P.all_nonneg c
+      exact P.zero_le c
     nlinarith
+  zero_le a := ϕ.monotone' (P.zero_le a)
   nat_order_embedding n m := by
     rw [map_natCast, map_natCast]
     exact Nat.cast_le
@@ -167,7 +171,7 @@ theorem toStrassenPreorder_isClosed {R : Type u} [CommSemiring R] {P : StrassenP
         exact h_final
       · apply div_nonneg
         · rw [← map_zero (ϕ.toRingHom)]
-          apply ϕ.monotone' (P.all_nonneg a)
+          apply ϕ.monotone' (P.zero_le a)
         · linarith
     rw [div_le_iff₀ hb] at h_base
     calc ϕ a ≤ (1 + ε) * ϕ b := h_base
@@ -176,7 +180,7 @@ theorem toStrassenPreorder_isClosed {R : Type u} [CommSemiring R] {P : StrassenP
   · have hb0 : ϕ b = 0 := by
       have : 0 ≤ ϕ b := by
         rw [← map_zero (ϕ.toRingHom)]
-        apply ϕ.monotone' (P.all_nonneg b)
+        apply ϕ.monotone' (P.zero_le b)
       linarith
     rw [hb0] at h_phi_le
     specialize h_phi_le 1
@@ -184,7 +188,7 @@ theorem toStrassenPreorder_isClosed {R : Type u} [CommSemiring R] {P : StrassenP
     simp only [pow_one, mul_zero] at h_phi_le
     have h_phi_a_pos : 0 ≤ ϕ a := by
       rw [← map_zero (ϕ.toRingHom)]
-      apply ϕ.monotone' (P.all_nonneg a)
+      apply ϕ.monotone' (P.zero_le a)
     linarith
 
 /-- The preorder defined by a spectrum point extends the original preorder P. -/
@@ -204,7 +208,7 @@ theorem rho_of_toStrassenPreorder {R : Type u} [CommSemiring R] {P : StrassenPre
     obtain ⟨q, hq1, hq2⟩ := exists_rat_btwn hv
     have : Q.rho a ≤ (q : ℝ) := by
       apply csInf_le (Q.rho_set_bddBelow a)
-      have h_phi_pos : 0 ≤ ϕ a := by rw [← map_zero (ϕ.toRingHom)]; apply ϕ.monotone'; exact P.all_nonneg a
+      have h_phi_pos : 0 ≤ ϕ a := by rw [← map_zero (ϕ.toRingHom)]; apply ϕ.monotone'; exact P.zero_le a
       have hq_pos : 0 < (q : ℝ) := lt_of_le_of_lt h_phi_pos hq1
       have h_q_num_pos : 0 ≤ q.num := by
         apply Rat.num_nonneg.mpr
@@ -260,7 +264,7 @@ theorem spectrum_right_inverse {P : StrassenPreorder R} (E : MaxExtension R P) :
   apply Subtype.ext
   ext a b
   dsimp [spectrumToMaxExtension, maxExtensionToSpectrum, AsymptoticSpectrumPoint.restrict, AsymptoticSpectrumPoint.toStrassenPreorder,
-    StrassenPreorder.rho_asymptoticSpectrumPoint, AsymptoticSpectrumPoint.toRingHom,
+    StrassenPreorder.rho_asymptoticSpectrumPoint, SemiringSpectrumPoint.toRingHom,
     StrassenPreorder.rho_toRingHom]
   change (E.val.rho a ≤ E.val.rho b ↔ E.val.le a b)
   rw [StrassenPreorder.rho_reflects_le E.val E.property.2.1 E.property.2.2]
@@ -370,3 +374,19 @@ instance (P : StrassenPreorder R) : CompactSpace (AsymptoticSpectrumPoint R P) :
 
 instance (P : StrassenPreorder R) : T2Space (AsymptoticSpectrumPoint R P) :=
   T2Space.of_injective_continuous embedding_toBox.injective continuous_toBox
+
+theorem spectrumPoint_implies_nat_order_embedding {P : SemiringPreorder R} (ϕ : SemiringSpectrumPoint R P) :
+    ∀ n m : ℕ, P.le (n : R) (m : R) ↔ n ≤ m := by
+  intro n m
+  constructor
+  · intro h
+    apply Nat.cast_le (α := ℝ).mp
+    rw [← map_natCast ϕ.toRingHom, ← map_natCast ϕ.toRingHom]
+    exact ϕ.monotone' h
+  · intro h
+    obtain ⟨k, rfl⟩ := Nat.le.dest h
+    rw [Nat.cast_add]
+    nth_rewrite 1 [← add_zero (n : R)]
+    rw [add_comm (n : R) 0, add_comm (n : R) (k : R)]
+    apply P.add_right
+    exact P.zero_le _

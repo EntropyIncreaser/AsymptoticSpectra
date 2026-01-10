@@ -28,6 +28,18 @@ theorem rank_monotone (P : StrassenPreorder R) (a b : R) : P.le a b → rank P a
   apply Nat.find_min'
   exact P.le_trans _ _ _ h (Nat.find_spec (P.upper_archimedean b))
 
+theorem rank_subadditive (P : StrassenPreorder R) (a : R) (b : R) : rank P (a + b) ≤ rank P a + rank P b := by
+  letI := P.toPreorder
+  apply Nat.find_min'
+  show P.le (a + b) ↑(rank P a + rank P b)
+  rw [Nat.cast_add]
+  have h1 := Nat.find_spec (P.upper_archimedean a)
+  have h2 := Nat.find_spec (P.upper_archimedean b)
+  apply P.le_trans (a + b) (↑(rank P a) + b) (↑(rank P a) + ↑(rank P b))
+  · exact P.add_right a (↑(rank P a)) h1 b
+  · rw [add_comm (rank P a : R), add_comm (rank P a : R)]
+    exact P.add_right b (↑(rank P b)) h2 (↑(rank P a))
+
 theorem rank_submultiplicative (P : StrassenPreorder R) (a : R) (b : R) : rank P (a * b) ≤ rank P a * rank P b := by
   letI := P.toPreorder
   apply Nat.find_min'
@@ -57,6 +69,92 @@ theorem rank_one (P : StrassenPreorder R) : rank P 1 = 1 := by
       simp at h_spec
       exact h_pos_nle h_spec
     exact Nat.succ_le_of_lt (Nat.pos_of_ne_zero this)
+
+def IsGreatestNat (Q : ℕ → Prop) (n : ℕ) : Prop :=
+  Q n ∧ ∀ m, Q m → m ≤ n
+
+def subrankData (P : StrassenPreorder R) (a : R) :
+    { n : ℕ // IsGreatestNat (fun n => P.le n a) n } := by
+  let S := fun (n : ℕ) => P.le (n : R) a
+  haveI : DecidablePred S := Classical.decPred S
+  let bound := rank P a + 1
+  -- We search for the greatest n < bound satisfying S
+  let n := Nat.findGreatest S bound
+  have h_bound : S 0 := by
+    dsimp [S]
+    rw [Nat.cast_zero]
+    exact P.zero_le a
+  have h_S : S n := Nat.findGreatest_spec (Nat.zero_le _) h_bound
+  have h_n_le_rank : n ≤ rank P a := by
+    dsimp [S] at h_S
+    have h_le_rank := Nat.find_spec (P.upper_archimedean a)
+    have := P.le_trans _ _ _ h_S h_le_rank
+    rwa [P.nat_order_embedding] at this
+  have h_n_bound : n < bound := Nat.lt_succ_of_le h_n_le_rank
+  refine ⟨n, ?_, ?_⟩
+  · exact h_S
+  · intro m hm
+    -- If m satisfies S, then m < bound because m ≤ a ≤ rank a < bound
+    have h_m_bound : m < bound := by
+      rw [Nat.lt_succ_iff]
+      -- m ≤ a and a ≤ rank a implies m ≤ rank a
+      have h_a_rank : P.le a (rank P a) := Nat.find_spec (P.upper_archimedean a)
+      have h_m_rank : P.le m (rank P a) := P.le_trans _ _ _ hm h_a_rank
+      rwa [P.nat_order_embedding] at h_m_rank
+    exact Nat.le_findGreatest (Nat.le_of_lt h_m_bound) hm
+
+/-- The subrank of an element is the largest natural number n such that n ≤ a. -/
+def subrank (P : StrassenPreorder R) (a : R) : ℕ :=
+  (subrankData P a).1
+
+theorem le_subrank (P : StrassenPreorder R) (a : R) : P.le (subrank P a) a :=
+  (subrankData P a).2.1
+
+theorem subrank_maximal (P : StrassenPreorder R) (a : R) (n : ℕ) (h : P.le n a) : n ≤ subrank P a :=
+  (subrankData P a).2.2 n h
+
+theorem subrank_le_iff (P : StrassenPreorder R) (a : R) (n : ℕ) :
+    n ≤ subrank P a ↔ P.le n a := by
+  constructor
+  · intro h
+    exact P.le_trans _ _ _ (P.nat_order_embedding _ _ |>.mpr h) (le_subrank P a)
+  · exact subrank_maximal P a n
+
+theorem subrank_le_rank (P : StrassenPreorder R) (a : R) : subrank P a ≤ rank P a := by
+  have h1 : P.le (subrank P a) a := le_subrank P a
+  have h2 : P.le a (rank P a) := Nat.find_spec (P.upper_archimedean a)
+  have h3 : P.le (subrank P a) (rank P a) := P.le_trans _ _ _ h1 h2
+  rwa [P.nat_order_embedding] at h3
+
+theorem subrank_monotone (P : StrassenPreorder R) (a : R) (b : R) (h : P.le a b) : subrank P a ≤ subrank P b := by
+  apply subrank_maximal
+  apply P.le_trans _ a
+  · exact le_subrank P a
+  · exact h
+
+theorem subrank_superadditive (P : StrassenPreorder R) (a : R) (b : R) : subrank P (a + b) ≥ subrank P a + subrank P b := by
+  apply subrank_maximal
+  rw [Nat.cast_add]
+  letI := P.toPreorder
+  apply P.le_trans _ (subrank P a + b)
+  · rw [add_comm]
+    nth_rewrite 2 [add_comm]
+    apply P.add_right
+    exact le_subrank P b
+  · apply P.add_right
+    exact le_subrank P a
+
+theorem subrank_supermultiplicative (P : StrassenPreorder R) (a : R) (b : R) : subrank P (a * b) ≥ subrank P a * subrank P b := by
+  apply subrank_maximal
+  rw [Nat.cast_mul]
+  letI := P.toPreorder
+  apply P.le_trans _ (subrank P a * b)
+  · rw [mul_comm]
+    nth_rewrite 2 [mul_comm]
+    apply P.mul_right
+    exact le_subrank P b
+  · apply P.mul_right
+    exact le_subrank P a
 
 theorem rank_pow_submultiplicative_base (P : StrassenPreorder R) (a : R) : IsSubmultiplicative (fun n => (rank P (a ^ n) : ℝ)) := by
   intro m n
@@ -195,7 +293,7 @@ lemma rho_set_bddBelow (P : StrassenPreorder R) (a : R) : BddBelow (P.rho_set a)
 
 lemma kappa_set_nonempty (P : StrassenPreorder R) (a : R) : (P.kappa_set a).Nonempty := by
   refine ⟨0, 0, 1, Nat.zero_lt_one, ?_, by simp⟩
-  simp; exact P.all_nonneg a
+  simp; exact P.zero_le a
 
 lemma kappa_set_bddAbove (P : StrassenPreorder R) (a : R) : BddAbove (P.kappa_set a) := by
   obtain ⟨K, hK⟩ := P.upper_archimedean a
@@ -492,7 +590,7 @@ theorem rho_eq_kappa_of_total (P : StrassenPreorder R) (total : P.IsTotal) (a : 
       have h0 : 0 ≤ P.kappa a := by
         apply le_csSup (P.kappa_set_bddAbove a)
         refine ⟨0, 1, Nat.zero_lt_one, ?_, by simp⟩
-        simpa using P.all_nonneg a
+        simpa using P.zero_le a
       exact Rat.cast_nonneg.mp (h0.trans hq_kappa.le)
     have hq_eq : (q : ℝ) = (n : ℝ) / m := by
       rw [Rat.cast_def]

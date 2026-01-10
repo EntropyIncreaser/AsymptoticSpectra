@@ -298,6 +298,16 @@ def asymptoticClosure (P : StrassenPreorder R) : StrassenPreorder R where
     have := P.mul_right (a ^ n) (↑(f n) * b ^ n) (hle n) (c ^ n)
     rw [mul_assoc] at this
     exact this
+  zero_le a := by
+    use fun _ => 1
+    constructor
+    · exact IsSubexponential.const_one
+    · intro n
+      cases n with
+      | zero => simp [pow_zero]
+      | succ n =>
+        simp [zero_pow (Nat.succ_ne_zero n), Nat.cast_one, one_mul]
+        exact P.zero_le (a ^ (n + 1))
   nat_order_embedding := AsymptoticLe.nat_order_embedding P
   lower_archimedean a := by
     cases P.lower_archimedean a with
@@ -639,7 +649,7 @@ theorem gap_property (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R} (h_not
         by_cases hm0 : m = 0
         · subst hm0; simp
           apply P.le_trans 0 c
-          · exact P.all_nonneg c
+          · exact P.zero_le c
           · convert h_ckb using 1
         · specialize h_all (Nat.pos_of_ne_zero hm0)
           apply P.le_trans _ ((m : R) * b + c)
@@ -712,7 +722,7 @@ theorem additive_cancellation (P : StrassenPreorder R) (hP : P.IsClosed) {a b c 
     induction n with
     | zero =>
       simp only [Nat.cast_zero, zero_mul, zero_add]
-      exact P.all_nonneg c
+      exact P.zero_le c
     | succ n ih =>
       simp only [Nat.cast_succ, add_mul, one_mul]
       apply P.le_trans _ ((↑n * b + c) + a)
@@ -770,6 +780,10 @@ def extensionBy (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R} (h_not_le :
     use s * c
     have h' := P.mul_right _ _ h c
     convert h' using 1 <;> ring
+  zero_le x := by
+    use 0
+    simp
+    exact P.zero_le x
   nat_order_embedding n m := by
     constructor
     · rintro ⟨s, h⟩
@@ -804,7 +818,7 @@ def extensionBy (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R} (h_not_le :
           exact Nat.not_succ_le_zero 0 h'''
         have h_sa_sb : P.le (s * a) (s * b) := by
           apply P.le_trans (s * a) (s * a + 1) (s * b)
-          · convert P.add_right 0 1 P.zero_le_one (s * a) using 1 <;> ring
+          · convert P.add_right 0 1 (P.zero_le 1) (s * a) using 1 <;> ring
           · exact h'''
         rw [mul_comm s a, mul_comm s b] at h_sa_sb
         have h_ab_P := multiplicative_cancellation P hP hs h_sa_sb
@@ -843,7 +857,7 @@ theorem one_step_extension (P : StrassenPreorder R) (hP : P.IsClosed) {a b : R}
     have h_ne : 1 + s ≠ 0 := by
       intro h_zero
       have h1 : P.le 1 (1 + s) := by
-        convert P.add_right 0 s (P.all_nonneg s) 1 using 1 <;> ring
+        convert P.add_right 0 s (P.zero_le s) 1 using 1 <;> ring
       rw [h_zero] at h1
       rw [← Nat.cast_one, ← Nat.cast_zero, P.nat_order_embedding] at h1
       exact Nat.not_succ_le_zero 0 h1
@@ -868,6 +882,9 @@ def chain_ub {R : Type u} [CommSemiring R] (c : Set (StrassenPreorder R))
   mul_right x y hxy c' := by
     obtain ⟨s, hP, h⟩ := hxy
     exact ⟨s, hP, s.mul_right x y h c'⟩
+  zero_le x := by
+    obtain ⟨P, hP⟩ := h_nonempty
+    exact ⟨P, hP, P.zero_le x⟩
   nat_order_embedding n m := by
     constructor
     · rintro ⟨P, hP, h⟩
