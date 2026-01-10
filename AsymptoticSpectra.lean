@@ -5,4 +5,5 @@ import AsymptoticSpectra.Spectrum
 import AsymptoticSpectra.Rank
 import AsymptoticSpectra.Duality
 import AsymptoticSpectra.Tensor.Tensor
+import AsymptoticSpectra.Tensor.BaseChange
 import AsymptoticSpectra.Tensor.Restriction

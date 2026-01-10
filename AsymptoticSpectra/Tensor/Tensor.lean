@@ -7,6 +7,7 @@ import Mathlib.Algebra.Module.ULift
 import Mathlib.LinearAlgebra.Prod
 import Mathlib.Algebra.Module.PUnit
 import Mathlib.LinearAlgebra.TensorProduct.Prod
+import Mathlib.LinearAlgebra.TensorProduct.Tower
 
 universe u v w
 
@@ -342,6 +343,12 @@ def mul (X Y : TensorObj K d) : TensorObj K d where
 
 instance : Add (TensorObj K d) := ⟨add⟩
 instance : Mul (TensorObj K d) := ⟨mul⟩
+
+@[simp] theorem add_t (X Y : TensorObj K d) : (X + Y).t =
+    liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) X.t +
+    liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) Y.t := rfl
+
+@[simp] theorem mul_t (X Y : TensorObj K d) : (X * Y).t = interchange X.t Y.t := rfl
 
 end
 
@@ -686,7 +693,6 @@ theorem zero_mul_isomorphic {X : TensorObj K d} : Isomorphic (zeroObj * X) zeroO
   change liftMap (fun i => (tensorZero (V := X.V i)).toLinearMap) (interchange zeroObj.t X.t) = zeroObj.t
   dsimp [zeroObj] -- 0
   rw [map_zero, LinearMap.zero_apply, map_zero]
-
 end TensorObj
 
 /-- The quotient of `TensorObj` by linear isomorphism. -/
