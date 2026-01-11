@@ -1,4 +1,6 @@
 import AsymptoticSpectra.Tensor.Tensor
+import AsymptoticSpectra.Structures
+
 
 universe u v w
 
@@ -77,5 +79,16 @@ instance : Preorder (Tensor K d) where
     induction y using Quotient.inductionOn
     induction z using Quotient.inductionOn
     exact restrict_trans
+
+instance instSemiringPreorder : SemiringPreorder (Tensor K d) where
+  add_right := fun _ _ h _ => by sorry
+  mul_right := fun _ _ h _ => by sorry
+  zero_le := fun _ => by sorry
+
+instance : StrassenPreorder (Tensor K d) where
+  toSemiringPreorder := instSemiringPreorder
+  nat_order_embedding := fun _ _ => by sorry
+  lower_archimedean := fun _ => by sorry
+  upper_archimedean := fun _ => by sorry
 
 end Tensor
