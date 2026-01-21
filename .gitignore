@@ -1,3 +1,6 @@
 /build
 /lake-packages/*
 .lake/*
+.claude
+.DS_Store
+.mcp.json
