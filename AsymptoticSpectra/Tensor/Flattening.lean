@@ -535,67 +535,273 @@ private noncomputable def tprodTensorBilin {ι : Type*} [Fintype ι] [DecidableE
     simp only [MultilinearMap.coe_mk, MultilinearMap.smul_apply,
       MultilinearMap.map_update_smul, smul_tmul']
 
+/-- Existence of the multilinear map M : (∀ i, V i ⊗ W i) →ₘ (⨂V) ⊗ (⨂W)
+    satisfying M (fun i => v i ⊗ₜ w i) = tprod v ⊗ₜ tprod w. -/
+private theorem piTensorDistribMultilinear_exists {ι : Type*} [Fintype ι] [DecidableEq ι]
+    {V W : ι → Type*}
+    [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
+    [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)] :
+    ∃ M : MultilinearMap K (fun i => V i ⊗[K] W i)
+            ((PiTensorProduct K V) ⊗[K] (PiTensorProduct K W)),
+      ∀ v w, M (fun i => v i ⊗ₜ[K] w i) = tprod K v ⊗ₜ[K] tprod K w := by
+  induction h : Fintype.card ι using Nat.strong_induction_on generalizing ι V W with
+  | _ n ih =>
+    cases isEmpty_or_nonempty ι with
+    | inl hι =>
+      haveI : IsEmpty ι := hι
+      refine ⟨⟨fun _ => (PiTensorProduct.isEmptyEquiv ι).symm 1 ⊗ₜ[K]
+                        (PiTensorProduct.isEmptyEquiv ι).symm 1,
+               fun _ i => isEmptyElim i, fun _ i => isEmptyElim i⟩, ?_⟩
+      intro v w
+      have hv : tprod K v = (PiTensorProduct.isEmptyEquiv ι).symm 1 := by
+        have : v = isEmptyElim := funext (fun i => isEmptyElim i)
+        rw [this, PiTensorProduct.isEmptyEquiv_symm_apply, one_smul]
+      have hw : tprod K w = (PiTensorProduct.isEmptyEquiv ι).symm 1 := by
+        have : w = isEmptyElim := funext (fun i => isEmptyElim i)
+        rw [this, PiTensorProduct.isEmptyEquiv_symm_apply, one_smul]
+      simp only [MultilinearMap.coe_mk, hv, hw]
+    | inr hι =>
+      haveI : Nonempty ι := hι
+      haveI : Inhabited ι := Classical.inhabited_of_nonempty hι
+
+      obtain ⟨α, e⟩ := Equiv.sigmaEquivOptionOfInhabited ι
+      haveI : Fintype α := fintypeOfOptionEquiv e
+      haveI : DecidableEq α := Classical.decEq α
+
+      have hα_lt : Fintype.card α < n := by
+        have h1 : Fintype.card ι = Fintype.card (Option α) := Fintype.card_congr e
+        rw [Fintype.card_option] at h1
+        omega
+
+      let V' : α → Type _ := fun a => V (e.symm (some a))
+      let W' : α → Type _ := fun a => W (e.symm (some a))
+      obtain ⟨M', hM'⟩ := ih (Fintype.card α) hα_lt (V := V') (W := W') rfl
+
+      let i₀ : ι := e.symm none
+
+      -- Key equivalence: Option α ≃ α ⊕ PUnit (some ↔ inl, none ↔ inr)
+      let optSum : Option α ≃ α ⊕ PUnit.{1} := Equiv.optionEquivSumPUnit α
+
+      -- Define the type families over the sum type
+      let Vsum : α ⊕ PUnit.{1} → Type _ := fun s => V (e.symm (optSum.symm s))
+      let Wsum : α ⊕ PUnit.{1} → Type _ := fun s => W (e.symm (optSum.symm s))
+
+      let eSum : ι ≃ α ⊕ PUnit.{1} := e.trans optSum
+
+      let subsingleV := (PiTensorProduct.subsingletonEquiv (R := K) (s := fun _ : PUnit.{1} => V i₀) PUnit.unit).symm
+      let subsingleW := (PiTensorProduct.subsingletonEquiv (R := K) (s := fun _ : PUnit.{1} => W i₀) PUnit.unit).symm
+
+      -- Define combineV and combineW as functions (we'll prove they're bilinear via sorry)
+      let combineV_fun : V i₀ → PiTensorProduct K V' → PiTensorProduct K V := fun v₀ tV' =>
+        (PiTensorProduct.reindex K V eSum).symm
+          ((PiTensorProduct.tmulEquivDep K Vsum) (tV' ⊗ₜ[K] subsingleV v₀))
+
+      let combineW_fun : W i₀ → PiTensorProduct K W' → PiTensorProduct K W := fun w₀ tW' =>
+        (PiTensorProduct.reindex K W eSum).symm
+          ((PiTensorProduct.tmulEquivDep K Wsum) (tW' ⊗ₜ[K] subsingleW w₀))
+
+      have combineW_add : ∀ tW' x y, combineW_fun (x + y) tW' = combineW_fun x tW' + combineW_fun y tW' := by
+        intro tW' x y
+        unfold combineW_fun
+        simp only [map_add, tmul_add]
+      have combineW_smul : ∀ tW' (c : K) x, combineW_fun (c • x) tW' = c • combineW_fun x tW' := by
+        intro tW' c x
+        unfold combineW_fun
+        simp only [map_smul, tmul_smul]
+      have combineV_add : ∀ tV' x y, combineV_fun (x + y) tV' = combineV_fun x tV' + combineV_fun y tV' := by
+        intro tV' x y
+        unfold combineV_fun
+        simp only [map_add, tmul_add]
+      have combineV_smul : ∀ tV' (c : K) x, combineV_fun (c • x) tV' = c • combineV_fun x tV' := by
+        intro tV' c x
+        unfold combineV_fun
+        simp only [map_smul, tmul_smul]
+
+      -- Linearity in the second argument (tW' and tV')
+      have combineW_add' : ∀ w₀ x y, combineW_fun w₀ (x + y) = combineW_fun w₀ x + combineW_fun w₀ y := by
+        intro w₀ x y
+        unfold combineW_fun
+        simp only [add_tmul, map_add]
+      have combineW_smul' : ∀ w₀ (c : K) x, combineW_fun w₀ (c • x) = c • combineW_fun w₀ x := by
+        intro w₀ c x
+        unfold combineW_fun
+        rw [TensorProduct.smul_tmul, tmul_smul, map_smul, map_smul]
+      have combineV_add' : ∀ v₀ x y, combineV_fun v₀ (x + y) = combineV_fun v₀ x + combineV_fun v₀ y := by
+        intro v₀ x y
+        unfold combineV_fun
+        simp only [add_tmul, map_add]
+      have combineV_smul' : ∀ v₀ (c : K) x, combineV_fun v₀ (c • x) = c • combineV_fun v₀ x := by
+        intro v₀ c x
+        unfold combineV_fun
+        rw [TensorProduct.smul_tmul, tmul_smul, map_smul, map_smul]
+
+      let innerBilin : (PiTensorProduct K V') →ₗ[K] (PiTensorProduct K W') →ₗ[K]
+          (V i₀ →ₗ[K] W i₀ →ₗ[K] (PiTensorProduct K V) ⊗[K] (PiTensorProduct K W)) :=
+        { toFun := fun tV' =>
+            { toFun := fun tW' =>
+                { toFun := fun v₀ =>
+                    { toFun := fun w₀ => combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ tW'
+                      map_add' := fun x y => by simp only [combineW_add, tmul_add]
+                      map_smul' := fun c x => by simp only [combineW_smul, tmul_smul, RingHom.id_apply] }
+                  map_add' := fun x y => by ext w₀; simp only [LinearMap.coe_mk, AddHom.coe_mk, combineV_add, add_tmul, LinearMap.add_apply]
+                  map_smul' := fun c x => by ext w₀; simp only [LinearMap.coe_mk, AddHom.coe_mk, combineV_smul, smul_tmul', RingHom.id_apply, LinearMap.smul_apply] }
+              map_add' := fun x y => by
+                ext v₀ w₀
+                simp only [LinearMap.coe_mk, AddHom.coe_mk, LinearMap.add_apply]
+                rw [combineW_add', tmul_add]
+              map_smul' := fun c x => by
+                ext v₀ w₀
+                simp only [LinearMap.coe_mk, AddHom.coe_mk, LinearMap.smul_apply, RingHom.id_apply]
+                rw [combineW_smul', tmul_smul] }
+          map_add' := fun x y => by
+            apply PiTensorProduct.ext
+            ext tW' v₀ w₀
+            simp only [LinearMap.compMultilinearMap_apply, LinearMap.add_apply, LinearMap.coe_mk,
+              AddHom.coe_mk, combineV_add', add_tmul]
+          map_smul' := fun c x => by
+            apply PiTensorProduct.ext
+            ext tW' v₀ w₀
+            simp only [LinearMap.compMultilinearMap_apply, LinearMap.smul_apply, LinearMap.coe_mk,
+              AddHom.coe_mk, RingHom.id_apply, combineV_smul', smul_tmul'] }
+
+      use {
+        toFun := fun f =>
+          let f_none : V i₀ ⊗[K] W i₀ := f i₀
+          let f_some : ∀ a : α, V' a ⊗[K] W' a := fun a => f (e.symm (some a))
+          let ih_result := M' f_some
+          let step1 := TensorProduct.lift innerBilin ih_result
+          TensorProduct.lift step1 f_none
+        map_update_add' := fun f i x y => by
+          simp only
+          by_cases hi : i = i₀
+          · subst hi
+            simp only [Function.update_self]
+            have hne : ∀ a, e.symm (some a) ≠ i₀ := by
+              intro a h
+              have : e (e.symm (some a)) = e i₀ := by rw [h]
+              simp only [Equiv.apply_symm_apply, i₀] at this
+              cases this
+            have h_some : ∀ a, Function.update f i₀ (x + y) (e.symm (some a)) = f (e.symm (some a)) :=
+              fun a => Function.update_of_ne (hne a) (x + y) f
+            have h_some_x : ∀ a, Function.update f i₀ x (e.symm (some a)) = f (e.symm (some a)) :=
+              fun a => Function.update_of_ne (hne a) x f
+            have h_some_y : ∀ a, Function.update f i₀ y (e.symm (some a)) = f (e.symm (some a)) :=
+              fun a => Function.update_of_ne (hne a) y f
+            simp only [h_some, h_some_x, h_some_y]
+            rw [map_add]
+          · have h_none : Function.update f i (x + y) i₀ = f i₀ := Function.update_of_ne (Ne.symm hi) (x + y) f
+            have h_none_x : Function.update f i x i₀ = f i₀ := Function.update_of_ne (Ne.symm hi) x f
+            have h_none_y : Function.update f i y i₀ = f i₀ := Function.update_of_ne (Ne.symm hi) y f
+            simp only [h_none, h_none_x, h_none_y]
+            have hi' : ∃ a, i = e.symm (some a) := by
+              cases he : e i with
+              | none => exfalso; apply hi; simp only [i₀]; rw [← he]; simp
+              | some a => exact ⟨a, by simp [← he]⟩
+            obtain ⟨a₀, ha₀⟩ := hi'
+            subst ha₀
+            have hM'_add := M'.map_update_add (fun a => f (e.symm (some a))) a₀ x y
+            simp only at hM'_add ⊢
+            have h_update : ∀ z : V' a₀ ⊗[K] W' a₀, (fun a => Function.update f (e.symm (some a₀)) z (e.symm (some a))) =
+                Function.update (fun a => f (e.symm (some a))) a₀ z := by
+              intro z; ext a
+              by_cases ha : a = a₀
+              · subst ha; simp [Function.update_self]
+              · rw [Function.update_of_ne ha, Function.update_of_ne]
+                intro h; apply ha; exact Option.some_injective α (e.symm.injective h)
+            simp only [h_update]
+            rw [hM'_add, map_add]
+            have lift_add : ∀ (g₁ g₂ : V i₀ →ₗ[K] W i₀ →ₗ[K] PiTensorProduct K V ⊗[K] PiTensorProduct K W),
+                TensorProduct.lift (g₁ + g₂) = TensorProduct.lift g₁ + TensorProduct.lift g₂ := by
+              intro g₁ g₂
+              change TensorProduct.uncurry _ _ _ _ (g₁ + g₂) = TensorProduct.uncurry _ _ _ _ g₁ + TensorProduct.uncurry _ _ _ _ g₂
+              rw [map_add]
+            rw [lift_add, LinearMap.add_apply]
+        map_update_smul' := fun f i c x => by
+          simp only
+          by_cases hi : i = i₀
+          · subst hi
+            simp only [Function.update_self]
+            have hne : ∀ a, e.symm (some a) ≠ i₀ := by
+              intro a h
+              have : e (e.symm (some a)) = e i₀ := by rw [h]
+              simp only [Equiv.apply_symm_apply, i₀] at this
+              cases this
+            have h_some : ∀ a, Function.update f i₀ (c • x) (e.symm (some a)) = f (e.symm (some a)) :=
+              fun a => Function.update_of_ne (hne a) (c • x) f
+            have h_some_x : ∀ a, Function.update f i₀ x (e.symm (some a)) = f (e.symm (some a)) :=
+              fun a => Function.update_of_ne (hne a) x f
+            simp only [h_some, h_some_x]
+            rw [map_smul]
+          · have h_none : Function.update f i (c • x) i₀ = f i₀ := Function.update_of_ne (Ne.symm hi) (c • x) f
+            have h_none_x : Function.update f i x i₀ = f i₀ := Function.update_of_ne (Ne.symm hi) x f
+            simp only [h_none, h_none_x]
+            have hi' : ∃ a, i = e.symm (some a) := by
+              cases he : e i with
+              | none => exfalso; apply hi; simp only [i₀]; rw [← he]; simp
+              | some a => exact ⟨a, by simp [← he]⟩
+            obtain ⟨a₀, ha₀⟩ := hi'
+            subst ha₀
+            have hM'_smul := M'.map_update_smul (fun a => f (e.symm (some a))) a₀ c x
+            simp only at hM'_smul ⊢
+            have h_update : ∀ z : V' a₀ ⊗[K] W' a₀, (fun a => Function.update f (e.symm (some a₀)) z (e.symm (some a))) =
+                Function.update (fun a => f (e.symm (some a))) a₀ z := by
+              intro z; ext a
+              by_cases ha : a = a₀
+              · subst ha; simp [Function.update_self]
+              · rw [Function.update_of_ne ha, Function.update_of_ne]
+                intro h; apply ha; exact Option.some_injective α (e.symm.injective h)
+            simp only [h_update]
+            rw [hM'_smul, map_smul]
+            have lift_smul : ∀ (c : K) (g : V i₀ →ₗ[K] W i₀ →ₗ[K] PiTensorProduct K V ⊗[K] PiTensorProduct K W),
+                TensorProduct.lift (c • g) = c • TensorProduct.lift g := by
+              intro c g
+              change TensorProduct.uncurry _ _ _ _ (c • g) = c • TensorProduct.uncurry _ _ _ _ g
+              rw [map_smul]
+            rw [lift_smul, LinearMap.smul_apply]
+      }
+      intro v w
+      simp only [MultilinearMap.coe_mk]
+      let v' : ∀ a : α, V' a := fun a => v (e.symm (some a))
+      let w' : ∀ a : α, W' a := fun a => w (e.symm (some a))
+      have ih_eq : M' (fun a => v' a ⊗ₜ[K] w' a) = (PiTensorProduct.tprod K) v' ⊗ₜ[K] (PiTensorProduct.tprod K) w' := hM' v' w'
+      conv_lhs => simp only [TensorProduct.lift.tmul, LinearMap.coe_mk, AddHom.coe_mk, ih_eq]
+      rw [ih_eq, TensorProduct.lift.tmul, LinearMap.coe_mk, AddHom.coe_mk]
+      show combineV_fun (v i₀) ((PiTensorProduct.tprod K) v') ⊗ₜ[K] combineW_fun (w i₀) ((PiTensorProduct.tprod K) w') =
+           (PiTensorProduct.tprod K) v ⊗ₜ[K] (PiTensorProduct.tprod K) w
+      have hcombineV : combineV_fun (v i₀) ((PiTensorProduct.tprod K) v') = (PiTensorProduct.tprod K) v := by
+        simp only [combineV_fun, subsingleV, PiTensorProduct.subsingletonEquiv_symm_apply']
+        rw [show ((PiTensorProduct.tprod K) v' : PiTensorProduct K V') =
+            (PiTensorProduct.tprod K (fun a => v' a) : ⨂[K] (a : α), Vsum (Sum.inl a)) from rfl]
+        rw [show ((PiTensorProduct.tprod K) (fun _ : PUnit => v i₀) : ⨂[K] (_ : PUnit), V i₀) =
+            (PiTensorProduct.tprod K (fun _ : PUnit => v i₀) : ⨂[K] (u : PUnit), Vsum (Sum.inr u)) from rfl]
+        rw [PiTensorProduct.tmulEquivDep_apply, LinearEquiv.symm_apply_eq, PiTensorProduct.reindex_tprod]
+        congr 1; ext s
+        cases s with
+        | inl a => simp only [eSum, Equiv.symm_trans_apply, optSum, Equiv.optionEquivSumPUnit_symm_inl, v']
+        | inr u => simp only [eSum, Equiv.symm_trans_apply, optSum, Equiv.optionEquivSumPUnit_symm_inr, i₀]
+      have hcombineW : combineW_fun (w i₀) ((PiTensorProduct.tprod K) w') = (PiTensorProduct.tprod K) w := by
+        simp only [combineW_fun, subsingleW, PiTensorProduct.subsingletonEquiv_symm_apply']
+        rw [show ((PiTensorProduct.tprod K) w' : PiTensorProduct K W') =
+            (PiTensorProduct.tprod K (fun a => w' a) : ⨂[K] (a : α), Wsum (Sum.inl a)) from rfl]
+        rw [show ((PiTensorProduct.tprod K) (fun _ : PUnit => w i₀) : ⨂[K] (_ : PUnit), W i₀) =
+            (PiTensorProduct.tprod K (fun _ : PUnit => w i₀) : ⨂[K] (u : PUnit), Wsum (Sum.inr u)) from rfl]
+        rw [PiTensorProduct.tmulEquivDep_apply, LinearEquiv.symm_apply_eq, PiTensorProduct.reindex_tprod]
+        have heq : (fun (s : α ⊕ PUnit) => Sum.rec w' (fun _ => w i₀) s) =
+                   (fun (s : α ⊕ PUnit) => w (eSum.symm s)) := by funext s; cases s <;> rfl
+        simp only [heq]; rfl
+      rw [hcombineV, hcombineW]
+
 /-- The multilinear map M : (∀ i, V i ⊗ W i) →ₘ (⨂V) ⊗ (⨂W) that is the left inverse
     of the interchange map. Satisfies M (fun i => v i ⊗ₜ w i) = tprod v ⊗ₜ tprod w.
 
-    The construction uses the key insight that tprodTensorBilin is multilinear in
-    v and w separately. We "diagonalize" this by composing with TensorProduct.lift
-    at each slot, which decomposes the input tensor and applies tprodTensorBilin
-    to the extracted components.
-
-    The formal construction processes each index using piTensorDistribAuxLin,
-    combining the results via the multilinear structure. -/
+    Defined via Classical.choose from the existence theorem. -/
 private noncomputable def piTensorDistribMultilinear {ι : Type*} [Fintype ι] [DecidableEq ι]
     {V W : ι → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
     [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)] :
     MultilinearMap K (fun i => V i ⊗[K] W i)
       ((PiTensorProduct K V) ⊗[K] (PiTensorProduct K W)) :=
-  -- We use tprodTensorBilin composed with TensorProduct.lift at each slot.
-  -- tprodTensorBilin : MultilinearMap K V (MultilinearMap K W ((⨂V) ⊗ (⨂W)))
-  --
-  -- For f : ∀ i, V i ⊗ W i, we want to "uncurry" tprodTensorBilin through each slot.
-  -- This is done by applying TensorProduct.lift at each index i.
-  --
-  -- The construction: M = tprodTensorBilin.compLinearMap (fun i => TensorProduct.lid K (V i))
-  -- composed with the "diagonal" embedding.
-  --
-  -- Actually, the cleanest construction is to compose tprod with projections:
-  -- M f = (tprod K (fun i => proj_V i (f i))) ⊗ₜ (tprod K (fun i => proj_W i (f i)))
-  -- where proj_V and proj_W are... not well-defined as linear maps.
-  --
-  -- The correct approach: use the universal property that tprod ⊗ tprod extends
-  -- to a multilinear map on tensor products at each slot.
-  --
-  -- For the formal construction, we use the Finset recursion pattern from
-  -- piTensorDistribAux_exists_unique, but package it as a multilinear map.
-  --
-  -- For now, we provide a sorry-based definition and prove the key property.
-  {
-    toFun := fun f =>
-      -- The value is computed by processing each slot using TensorProduct.lift.
-      -- For a pure tensor input (fun i => v i ⊗ₜ w i), this gives tprod v ⊗ₜ tprod w.
-      --
-      -- The construction uses the multilinear structure of tprod on both factors.
-      -- We define it abstractly and prove the key property separately.
-      --
-      -- Mathematical sketch:
-      -- Each f i is a finite sum of pure tensors: f i = ∑ⱼ cⱼ (vⱼ ⊗ₜ wⱼ)
-      -- M f = ∑ over all combinations of choosing one term from each slot
-      --     = ∑_{j : ι → index} ∏ᵢ cⱼ(i) • (tprod (fun i => vⱼ(i)) ⊗ₜ tprod (fun i => wⱼ(i)))
-      --
-      -- This is well-defined and independent of the decomposition choice.
-      sorry
-    map_update_add' := fun f i x y => by
-      -- Multilinearity follows from the linearity of the construction at each slot.
-      -- At slot i, replacing x + y with x and y separately:
-      -- M(update f i (x + y)) = M(update f i x) + M(update f i y)
-      -- This is because TensorProduct.lift is linear.
-      sorry
-    map_update_smul' := fun f i c x => by
-      -- Scalar multiplication follows similarly.
-      sorry
-  }
+  Classical.choose (piTensorDistribMultilinear_exists (K := K))
 
 /-- The key property of piTensorDistribMultilinear: on pure tensor inputs,
     it produces tprod v ⊗ₜ tprod w. -/
@@ -604,71 +810,28 @@ private theorem piTensorDistribMultilinear_pure {ι : Type*} [Fintype ι] [Decid
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
     [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
     (v : ∀ i, V i) (w : ∀ i, W i) :
-    piTensorDistribMultilinear (fun i => v i ⊗ₜ[K] w i) = tprod K v ⊗ₜ[K] tprod K w := by
-  sorry
+    piTensorDistribMultilinear (fun i => v i ⊗ₜ[K] w i) = tprod K v ⊗ₜ[K] tprod K w :=
+  Classical.choose_spec (piTensorDistribMultilinear_exists (K := K)) v w
 
-/-- The interchange map (lifted to tensor product) is injective.
-
-The proof uses that interchange maps the spanning set {tprod v ⊗ₜ tprod w}
-to the spanning set {tprod (v ⊗ w)}, both of which generate bases when the
-modules are free. For free modules over a field, this implies injectivity.
-
-The key observation is that the submodule generated by {tprod v ⊗ₜ tprod w}
-is all of (⨂V) ⊗ (⨂W), and interchange restricts to a bijection on these
-spanning sets (up to the identification with basis elements). -/
+/-- The interchange map (lifted to tensor product) is injective. -/
 private theorem piTensorDistribInvFun_injective {ι : Type*} [Fintype ι] [DecidableEq ι]
     {V W : ι → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
     [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)] :
     Function.Injective (TensorProduct.lift (TensorObj.interchange (K := K) (V := V) (W := W))) := by
-  -- We construct a left inverse L : ⨂(V ⊗ W) → (⨂V) ⊗ (⨂W).
-  -- L = PiTensorProduct.lift M where M is the multilinear map piTensorDistribAux
-  -- (defined later), which satisfies M (fun i => v i ⊗ₜ w i) = tprod v ⊗ₜ tprod w.
-  --
-  -- However, piTensorDistribAux is defined using Classical.choose from the uniqueness
-  -- theorem piTensorDistribAux_exists_unique, which in turn uses THIS theorem
-  -- (piTensorDistribInvFun_injective) for the uniqueness part.
-  --
-  -- To break this circularity, we prove injectivity directly using strong induction
-  -- on Fintype.card ι, constructing the left inverse at each step without relying
-  -- on the uniqueness theorem.
-
-  -- Strong induction on the cardinality of ι
   induction h : Fintype.card ι using Nat.strong_induction_on generalizing ι V W with
   | _ n ih =>
-    -- Case split on whether ι is empty
     cases isEmpty_or_nonempty ι with
     | inl hι =>
-      -- Empty case: both domain and codomain are 1-dimensional
       haveI : IsEmpty ι := hι
       intro x y hxy
-      -- When ι is empty, ⨂V ≅ K and ⨂W ≅ K, so (⨂V) ⊗ (⨂W) ≅ K
-      -- Similarly, ⨂(V ⊗ W) ≅ K
-      -- The interchange map is the identity (both are canonically K)
       let eV : PiTensorProduct K V ≃ₗ[K] K := PiTensorProduct.isEmptyEquiv ι
       let eW : PiTensorProduct K W ≃ₗ[K] K := PiTensorProduct.isEmptyEquiv ι
       let eVW : PiTensorProduct K (fun i => V i ⊗[K] W i) ≃ₗ[K] K :=
         PiTensorProduct.isEmptyEquiv ι
-      -- x, y ∈ (⨂V) ⊗ (⨂W) ≅ K ⊗ K ≅ K
-      -- Since both map to the same element under interchange, and interchange
-      -- is essentially the identity on K, we get x = y
-      -- The key is that TensorProduct K K ≅ K via the multiplication map
       let eTensor : (PiTensorProduct K V) ⊗[K] (PiTensorProduct K W) ≃ₗ[K] K :=
         TensorProduct.congr eV eW ≪≫ₗ TensorProduct.lid K K
-      -- interchange factors as: (⨂V) ⊗ (⨂W) → ⨂(V ⊗ W) → K
-      -- Using the isomorphisms, this becomes K → K, which is multiplication by 1
-      -- Therefore, if interchange(x) = interchange(y), then x = y
       have h1 : eTensor x = eTensor y := by
-        -- The key is that the diagram commutes:
-        -- (⨂V) ⊗ (⨂W) --interchange--> ⨂(V ⊗ W)
-        --      |                              |
-        --   eTensor                        eVW
-        --      ↓                              ↓
-        --      K     ======id======>          K
-        -- So interchange is injective iff eTensor is
-        -- But eTensor is an equivalence, so it's injective
-        -- We need: eTensor x = eTensor y follows from hxy
-        -- Actually, we need to show that eTensor and eVW ∘ interchange agree
         have hcomm : ∀ t, eVW (TensorProduct.lift TensorObj.interchange t) = eTensor t := by
           intro t
           induction t using TensorProduct.induction_on with
@@ -681,16 +844,11 @@ private theorem piTensorDistribInvFun_injective {ι : Type*} [Fintype ι] [Decid
               | smul_tprod c' w =>
                 simp only [map_smul, LinearMap.smul_apply]
                 rw [TensorObj.interchange_tprod_K]
-                -- Goal: c' • c • eVW (tprod ...) = eTensor ((c • tprod v) ⊗ₜ (c' • tprod w))
-                -- For empty ι, eVW (tprod _) = 1, eV (tprod _) = 1, eW (tprod _) = 1
                 simp only [smul_eq_mul]
-                -- eVW, eV, eW are all isEmptyEquiv ι (but as `have` not `let`)
-                -- We compute explicitly
                 have heVW : eVW (tprod K fun i => v i ⊗ₜ[K] w i) = 1 :=
                   PiTensorProduct.isEmptyEquiv_apply_tprod ι _
                 have heV1 : eV (tprod K v) = 1 := PiTensorProduct.isEmptyEquiv_apply_tprod ι _
                 have heW1 : eW (tprod K w) = 1 := PiTensorProduct.isEmptyEquiv_apply_tprod ι _
-                -- For eTensor
                 calc c' * (c * eVW (tprod K fun i => v i ⊗ₜ[K] w i))
                     = c' * (c * 1) := by rw [heVW]
                   _ = c * c' := by ring
@@ -713,97 +871,25 @@ private theorem piTensorDistribInvFun_injective {ι : Type*} [Fintype ι] [Decid
         rw [← hcomm x, ← hcomm y, hxy]
       exact eTensor.injective h1
     | inr hι =>
-      -- Non-empty case: construct a left inverse directly
       haveI : Nonempty ι := hι
-
-      -- We construct a left inverse L : ⨂(V ⊗ W) → (⨂V) ⊗ (⨂W)
-      -- L = PiTensorProduct.lift M where M is a multilinear map satisfying
-      -- M (fun i => v i ⊗ₜ w i) = tprod v ⊗ₜ tprod w.
-
-      -- Define M using Finset induction on processed slots.
-      -- For each f : ∀ i, V i ⊗ W i, we compute M f by processing each slot.
-
-      -- The key insight: for pure tensor inputs f = (fun i => v i ⊗ₜ w i),
-      -- we want M f = tprod v ⊗ₜ tprod w.
-      --
-      -- For general f, M extends multilinearly. At each slot i, the map
-      -- f i ↦ M(update f' i (f i)) is linear because it factors through
-      -- TensorProduct.lift of the bilinear map piTensorDistribAuxBilin.
-      --
-      -- The definition: M f = (nested application of piTensorDistribAuxLin)
-      -- But this is complex to write directly.
-      --
-      -- Alternative: use the surjectivity proof structure.
-      -- The surjectivity proof in piTensorDistribAux_exists_unique shows that
-      -- every element of ⨂(V ⊗ W) is in the range of interchange.
-      -- For the preimage, we use the Finset induction to construct it.
-      --
-      -- For M, we use a similar construction but package it as a multilinear map.
-      --
-      -- Actually, the cleanest approach is to observe that M can be defined as:
-      -- M f = the element t such that interchange(t) = tprod K f
-      -- (which exists by surjectivity, and we prove it's unique by this theorem).
-      --
-      -- But we can't use uniqueness (circular). So we construct t directly.
-      --
-      -- The construction: process each slot using TensorProduct.induction_on,
-      -- collecting the pure tensor components.
-
-      -- For now, we use a simpler construction that works for pure tensor inputs
-      -- and extend by multilinearity.
-      --
-      -- Key observation: The target is an AddCommGroup, so we can define M
-      -- by specifying its values on a spanning set (pure tensors) and proving
-      -- the multilinearity conditions hold.
-
-      -- Use the fact that tprodTensorBilin gives us the multilinear structure we need
-      -- tprodTensorBilin : MultilinearMap K V (MultilinearMap K W ((⨂V) ⊗ (⨂W)))
-      -- We need to "lift" this through V i ⊗ W i → (v, w) decomposition
-
-      -- The multilinear map M is defined implicitly by the Finset induction:
-      -- we process each slot, decomposing f i into pure tensors and accumulating
-
-      -- For this proof, we take a different approach:
-      -- We show that the map factors through an isomorphism, making it injective.
-
-      -- Actually, let's use the spanning set approach more directly.
-      -- We show that if interchange(x) = 0, then x = 0 (kernel is trivial).
-
-      -- We use the multilinear map piTensorDistribMultilinear as a left inverse.
-      -- L = PiTensorProduct.lift piTensorDistribMultilinear satisfies
-      -- L ∘ interchange = id on (⨂V) ⊗ (⨂W).
-
-      -- The key property is: piTensorDistribMultilinear (fun i => v i ⊗ₜ w i) = tprod v ⊗ₜ tprod w
-      -- Combined with: interchange (tprod v ⊗ₜ tprod w) = tprod (fun i => v i ⊗ₜ w i)
-      -- We get: L (interchange (tprod v ⊗ₜ tprod w)) = tprod v ⊗ₜ tprod w
 
       let L : PiTensorProduct K (fun i => V i ⊗[K] W i) →ₗ[K]
               (PiTensorProduct K V) ⊗[K] (PiTensorProduct K W) :=
         PiTensorProduct.lift piTensorDistribMultilinear
 
-      -- Prove injectivity using L as a left inverse
       apply Function.LeftInverse.injective (g := L)
       intro t
 
-      -- Show: L (interchange t) = t for all t : (⨂V) ⊗ (⨂W)
       induction t using TensorProduct.induction_on with
       | zero => simp only [map_zero]
       | tmul t₁ t₂ =>
-        -- t₁ ∈ ⨂V, t₂ ∈ ⨂W
         induction t₁ using PiTensorProduct.induction_on with
         | smul_tprod c v =>
           induction t₂ using PiTensorProduct.induction_on with
           | smul_tprod c' w =>
-            -- L (interchange ((c • tprod v) ⊗ₜ (c' • tprod w)))
-            -- = L (c' * c • tprod (fun i => v i ⊗ₜ w i))
-            -- = c' * c • piTensorDistribMultilinear (fun i => v i ⊗ₜ w i)
-            -- = c' * c • (tprod v ⊗ₜ tprod w)
-            -- = (c • tprod v) ⊗ₜ (c' • tprod w)
             simp only [TensorProduct.lift.tmul, map_smul, LinearMap.smul_apply]
             rw [TensorObj.interchange_tprod_K, PiTensorProduct.lift.tprod]
             rw [piTensorDistribMultilinear_pure]
-            -- Goal: c' • c • (tprod v ⊗ₜ tprod w) = (c • tprod v) ⊗ₜ (c' • tprod w)
-            -- Use smul_smul and then distribute into the tensor
             rw [smul_smul, mul_comm, ← smul_smul]
             rw [smul_tmul', smul_tmul]
             rfl
