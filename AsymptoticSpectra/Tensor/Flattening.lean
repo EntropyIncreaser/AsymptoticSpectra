@@ -432,6 +432,484 @@ variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
 
 variable (σ : Split (Fin d))
 
+/-! ## Supporting Lemmas for flatteningRank_add -/
+
+section FlatteningRankAdd
+
+variable {σ}
+
+omit [Fact (1 < d)] in
+/-- splitTensorEquiv commutes with liftMap for arbitrary linear maps.
+    This is the linear map analogue of splitTensorEquiv_naturality. -/
+theorem splitTensorEquiv_liftMap {V W : Fin d → Type v}
+    [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
+    [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
+    (f : ∀ i, V i →ₗ[K] W i) (t : PiTensorProduct K V) :
+    splitTensorEquiv σ (TensorObj.liftMap f t) =
+    TensorProduct.map
+      (TensorObj.liftMap (fun (i : σ.S) => f i.val))
+      (TensorObj.liftMap (fun (i : Sc σ) => f i.val))
+      (splitTensorEquiv σ t) := by
+  induction t using PiTensorProduct.induction_on with
+  | smul_tprod r v =>
+    simp only [map_smul]
+    congr 1
+    -- LHS: splitTensorEquiv σ (liftMap f (tprod K v))
+    -- = splitTensorEquiv σ (tprod K (fun i => f i (v i)))
+    -- RHS: map (liftMap _) (liftMap _) (splitTensorEquiv σ (tprod K v))
+    rw [TensorObj.liftMap_tprod]
+    simp only [splitTensorEquiv, LinearEquiv.trans_apply]
+    -- Use show to convert the notation to explicit tprod K
+    show (PiTensorProduct.tmulEquivDep K _).symm
+        ((PiTensorProduct.reindex K W (splitEquiv σ).symm) (tprod K (fun i => f i (v i)))) =
+      TensorProduct.map _ _ ((PiTensorProduct.tmulEquivDep K _).symm
+        ((PiTensorProduct.reindex K V (splitEquiv σ).symm) (tprod K v)))
+    rw [PiTensorProduct.reindex_tprod, PiTensorProduct.reindex_tprod]
+    rw [PiTensorProduct.tmulEquivDep_symm_apply, PiTensorProduct.tmulEquivDep_symm_apply]
+    rw [TensorProduct.map_tmul]
+    simp only [Equiv.symm_symm]
+    -- Need to show each component is equal
+    congr 1
+    · -- First component: tprod K (fun i₁ => f ... (v ...)) = liftMap (tprod K (fun i₁ => v ...))
+      change _ = (TensorObj.liftMap (fun i : σ.S => f i.val)) (tprod K _)
+      simp only [TensorObj.liftMap_tprod]
+      -- Now: tprod (fun i₁ => f (splitEquiv (inl i₁)) (v (splitEquiv (inl i₁))))
+      --    = tprod (fun i => f ↑i (v (splitEquiv (inl i))))
+      -- These are equal because ↑i = i.val = splitEquiv σ (Sum.inl i) for i : σ.S
+      rfl
+    · -- Second component
+      change _ = (TensorObj.liftMap (fun i : Sc σ => f i.val)) (tprod K _)
+      simp only [TensorObj.liftMap_tprod]
+      rfl
+  | add x y ihx ihy =>
+    simp only [map_add, ihx, ihy]
+
+variable (K)
+
+/-- tensorToDualHom applied to (map inl inl) lands in the inl component. -/
+theorem tensorToDualHom_map_inl_inl {A B C D : Type*}
+    [AddCommGroup A] [Module K A] [AddCommGroup B] [Module K B]
+    [AddCommGroup C] [Module K C] [AddCommGroup D] [Module K D]
+    (t : A ⊗[K] B) (f : Dual K (A × C)) :
+    tensorToDualHom K (A × C) (B × D)
+      (TensorProduct.map (LinearMap.inl K A C) (LinearMap.inl K B D) t) f =
+    LinearMap.inl K B D (tensorToDualHom K A B t (f ∘ₗ LinearMap.inl K A C)) := by
+  induction t using TensorProduct.induction_on with
+  | zero =>
+    simp only [map_zero, LinearMap.zero_apply]
+  | tmul a b =>
+    simp only [TensorProduct.map_tmul, tensorToDualHom_tmul]
+    simp only [LinearMap.inl_apply, LinearMap.coe_comp, Function.comp_apply]
+    ext <;> simp
+  | add x y ihx ihy =>
+    simp only [map_add, LinearMap.add_apply, ihx, ihy]
+
+/-- tensorToDualHom applied to (map inr inr) lands in the inr component. -/
+theorem tensorToDualHom_map_inr_inr {A B C D : Type*}
+    [AddCommGroup A] [Module K A] [AddCommGroup B] [Module K B]
+    [AddCommGroup C] [Module K C] [AddCommGroup D] [Module K D]
+    (t : C ⊗[K] D) (f : Dual K (A × C)) :
+    tensorToDualHom K (A × C) (B × D)
+      (TensorProduct.map (LinearMap.inr K A C) (LinearMap.inr K B D) t) f =
+    LinearMap.inr K B D (tensorToDualHom K C D t (f ∘ₗ LinearMap.inr K A C)) := by
+  induction t using TensorProduct.induction_on with
+  | zero =>
+    simp only [map_zero, LinearMap.zero_apply]
+  | tmul c d =>
+    simp only [TensorProduct.map_tmul, tensorToDualHom_tmul]
+    simp only [LinearMap.inr_apply, LinearMap.coe_comp, Function.comp_apply]
+    ext <;> simp
+  | add x y ihx ihy =>
+    simp only [map_add, LinearMap.add_apply, ihx, ihy]
+
+variable {K}
+
+/-- Generalized tensorToDualHom naturality for linear maps (not just equivalences).
+    This shows tensorToDualHom (map fA fB t) f = fB (tensorToDualHom t (f ∘ fA)). -/
+theorem tensorToDualHom_map {A A' B B' : Type*}
+    [AddCommGroup A] [Module K A] [AddCommGroup A'] [Module K A']
+    [AddCommGroup B] [Module K B] [AddCommGroup B'] [Module K B']
+    (fA : A →ₗ[K] A') (fB : B →ₗ[K] B') (t : A ⊗[K] B) (f : Dual K A') :
+    tensorToDualHom K A' B' (TensorProduct.map fA fB t) f =
+    fB (tensorToDualHom K A B t (f ∘ₗ fA)) := by
+  induction t using TensorProduct.induction_on with
+  | zero => simp only [map_zero, LinearMap.zero_apply]
+  | tmul a b =>
+    simp only [TensorProduct.map_tmul, tensorToDualHom_tmul, LinearMap.coe_comp,
+      Function.comp_apply, LinearMap.map_smul]
+  | add x y ihx ihy => simp only [map_add, LinearMap.add_apply, ihx, ihy]
+
+theorem flatteningMap_add_decomp (X Y : TensorObj K d) :
+    flatteningMap σ (X + Y) =
+    (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V i) (Y.V i))).comp
+      ((flatteningMap σ X).comp
+        (TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V i) (Y.V i))).dualMap) +
+    (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V i) (Y.V i))).comp
+      ((flatteningMap σ Y).comp
+        (TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V i) (Y.V i))).dualMap) := by
+  ext f
+  simp only [flatteningMap]
+  rw [TensorObj.add_t, map_add, map_add]
+  -- Use splitTensorEquiv_liftMap to rewrite both terms
+  -- Key: (X + Y).V i = X.V i × Y.V i definitionally
+  have heq1 : splitTensorEquiv σ (TensorObj.liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) X.t) =
+      TensorProduct.map
+        (TensorObj.liftMap (fun (i : σ.S) => LinearMap.inl K (X.V i.val) (Y.V i.val)))
+        (TensorObj.liftMap (fun (i : Sc σ) => LinearMap.inl K (X.V i.val) (Y.V i.val)))
+        (splitTensorEquiv σ X.t) := splitTensorEquiv_liftMap _ _
+  have heq2 : splitTensorEquiv σ (TensorObj.liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) Y.t) =
+      TensorProduct.map
+        (TensorObj.liftMap (fun (i : σ.S) => LinearMap.inr K (X.V i.val) (Y.V i.val)))
+        (TensorObj.liftMap (fun (i : Sc σ) => LinearMap.inr K (X.V i.val) (Y.V i.val)))
+        (splitTensorEquiv σ Y.t) := splitTensorEquiv_liftMap _ _
+  -- Use convert to handle the definitional type equality (X+Y).V i = X.V i × Y.V i
+  -- First, show the first summand. Types:
+  -- LHS: tensorToDualHom (splitTensorEquiv (liftMap inl X.t)) f
+  --      where the tensorToDualHom has types ⨂(X+Y).V|_S → ⨂(X+Y).V|_Sc
+  -- RHS: (liftMap inl_Sc) ((tensorToDualHom (splitTensorEquiv X.t)) (f ∘ liftMap inl_S))
+  --      where tensorToDualHom has types ⨂X.V|_S → ⨂X.V|_Sc
+  have h1 : (tensorToDualHom K (⨂[K] (i : σ.S), (X + Y).V ↑i) (⨂[K] (i : Sc σ), (X + Y).V ↑i))
+              ((splitTensorEquiv σ) ((TensorObj.liftMap fun i => LinearMap.inl K (X.V i) (Y.V i)) X.t)) f =
+            (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i)))
+              ((tensorToDualHom K (⨂[K] (i : σ.S), X.V ↑i) (⨂[K] (i : Sc σ), X.V ↑i)) ((splitTensorEquiv σ) X.t)
+                (f.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))))) := by
+    -- The types (X+Y).V i and X.V i × Y.V i are definitionally equal
+    -- Use show to make the type explicit, then rewrite
+    show (tensorToDualHom K (⨂[K] (i : σ.S), X.V ↑i × Y.V ↑i) (⨂[K] (i : Sc σ), X.V ↑i × Y.V ↑i))
+           ((splitTensorEquiv σ) ((TensorObj.liftMap fun i => LinearMap.inl K (X.V i) (Y.V i)) X.t)) f = _
+    rw [heq1, tensorToDualHom_map]
+  have h2 : (tensorToDualHom K (⨂[K] (i : σ.S), (X + Y).V ↑i) (⨂[K] (i : Sc σ), (X + Y).V ↑i))
+              ((splitTensorEquiv σ) ((TensorObj.liftMap fun i => LinearMap.inr K (X.V i) (Y.V i)) Y.t)) f =
+            (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i)))
+              ((tensorToDualHom K (⨂[K] (i : σ.S), Y.V ↑i) (⨂[K] (i : Sc σ), Y.V ↑i)) ((splitTensorEquiv σ) Y.t)
+                (f.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))))) := by
+    show (tensorToDualHom K (⨂[K] (i : σ.S), X.V ↑i × Y.V ↑i) (⨂[K] (i : Sc σ), X.V ↑i × Y.V ↑i))
+           ((splitTensorEquiv σ) ((TensorObj.liftMap fun i => LinearMap.inr K (X.V i) (Y.V i)) Y.t)) f = _
+    rw [heq2, tensorToDualHom_map]
+  simp only [LinearMap.add_apply]
+  rw [h1, h2]
+  rfl
+
+/-- The range of flatteningMap σ (X + Y) splits into direct sum of ranges. -/
+theorem flatteningMap_add_range (X Y : TensorObj K d) :
+    LinearMap.range (flatteningMap σ (X + Y)) =
+    Submodule.map (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V i) (Y.V i)))
+                  (LinearMap.range (flatteningMap σ X)) ⊔
+    Submodule.map (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V i) (Y.V i)))
+                  (LinearMap.range (flatteningMap σ Y)) := by
+  -- Uses flatteningMap_add_decomp and the range of a sum of compositions
+  rw [flatteningMap_add_decomp]
+  -- Now the LHS is range of (liftMap inl ∘ flatteningMap X ∘ dualMap + liftMap inr ∘ flatteningMap Y ∘ dualMap)
+  -- The range of a sum is contained in the sup of ranges, and equality holds when ranges are disjoint
+  apply le_antisymm
+  · -- ⊆ direction: range of sum is contained in sup of ranges
+    intro t ht
+    simp only [LinearMap.mem_range] at ht
+    obtain ⟨f, rfl⟩ := ht
+    -- Unfold the sum of linear maps applied to f
+    change ((TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i))) ∘ₗ
+            (flatteningMap σ X) ∘ₗ (TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))).dualMap +
+           (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i))) ∘ₗ
+            (flatteningMap σ Y) ∘ₗ (TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))).dualMap) f ∈ _
+    rw [LinearMap.add_apply]
+    apply Submodule.add_mem
+    · apply Submodule.mem_sup_left
+      simp only [Submodule.mem_map, LinearMap.mem_range]
+      use flatteningMap σ X (f.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))))
+      constructor
+      · use f.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i)))
+      · rfl
+    · apply Submodule.mem_sup_right
+      simp only [Submodule.mem_map, LinearMap.mem_range]
+      use flatteningMap σ Y (f.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))))
+      constructor
+      · use f.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i)))
+      · rfl
+  · -- ⊇ direction: sup of ranges is contained in range of sum
+    apply sup_le
+    · -- liftMap inl (range flatteningMap X) ⊆ range (flatteningMap (X + Y))
+      intro t ht
+      simp only [Submodule.mem_map, LinearMap.mem_range] at ht
+      obtain ⟨x, ⟨g, rfl⟩, rfl⟩ := ht
+      -- Need to find f such that flatteningMap (X + Y) f = liftMap inl (flatteningMap X g)
+      -- From the decomposition: flatteningMap (X + Y) f = liftMap inl (flatteningMap X (f ∘ liftMap inl)) + liftMap inr (flatteningMap Y (f ∘ liftMap inr))
+      -- So we want f such that f ∘ liftMap inl = g and f ∘ liftMap inr = 0
+      -- This requires extending g to the product: f = g ∘ fst (as a dual map)
+      simp only [LinearMap.mem_range]
+      -- Construct the dual that projects onto the X component
+      let fst_dual : Dual K (⨂[K] (i : σ.S), (X + Y).V ↑i) :=
+        g.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.fst K (X.V ↑i) (Y.V ↑i)))
+      use fst_dual
+      simp only [LinearMap.add_apply, LinearMap.coe_comp, Function.comp_apply, fst_dual]
+      -- liftMap inl (flatteningMap X (g ∘ fst ∘ liftMap inl)) + liftMap inr (flatteningMap Y (g ∘ fst ∘ liftMap inr))
+      -- fst ∘ inl = id, so g ∘ fst ∘ liftMap inl = g ∘ liftMap id = g
+      -- fst ∘ inr = 0, so g ∘ fst ∘ liftMap inr = 0
+      have h1 : ∀ t, (TensorObj.liftMap (fun i : σ.S => LinearMap.fst K (X.V ↑i) (Y.V ↑i)))
+                     ((TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))) t) = t := by
+        intro t
+        rw [TensorObj.liftMap_comp]
+        simp only [LinearMap.fst_comp_inl]
+        induction t using PiTensorProduct.induction_on with
+        | smul_tprod r v =>
+          simp only [map_smul, TensorObj.liftMap_tprod, LinearMap.id_coe, id_eq]
+        | add x y ihx ihy =>
+          simp only [map_add, ihx, ihy]
+      have h2 : ∀ t, (TensorObj.liftMap (fun i : σ.S => LinearMap.fst K (X.V ↑i) (Y.V ↑i)))
+                     ((TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))) t) = 0 := by
+        intro t
+        rw [TensorObj.liftMap_comp]
+        simp only [LinearMap.fst_comp_inr]
+        induction t using PiTensorProduct.induction_on with
+        | smul_tprod r v =>
+          simp only [map_smul, TensorObj.liftMap_tprod, LinearMap.zero_apply]
+          obtain ⟨i₀, hi₀⟩ := σ.hS
+          rw [(PiTensorProduct.tprod K (s := fun i : σ.S => X.V ↑i)).map_coord_zero ⟨i₀, hi₀⟩ rfl]
+          simp only [smul_zero]
+        | add x y ihx ihy =>
+          simp only [map_add, ihx, ihy, add_zero]
+      -- Goal: liftMap inl (flatteningMap X (dualMap inl (g ∘ liftMap fst))) +
+      --       liftMap inr (flatteningMap Y (dualMap inr (g ∘ liftMap fst))) =
+      --       liftMap inl (flatteningMap X g)
+      -- dualMap inl (g ∘ liftMap fst) = (g ∘ liftMap fst) ∘ liftMap inl = g ∘ (liftMap fst ∘ liftMap inl) = g ∘ id = g
+      -- dualMap inr (g ∘ liftMap fst) = (g ∘ liftMap fst) ∘ liftMap inr = g ∘ (liftMap fst ∘ liftMap inr) = g ∘ 0 = 0
+      have heq1 : (TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))).dualMap
+                   (g ∘ₗ TensorObj.liftMap (fun i : σ.S => LinearMap.fst K (X.V ↑i) (Y.V ↑i))) = g := by
+        apply LinearMap.ext; intro t
+        simp only [LinearMap.dualMap_apply, LinearMap.coe_comp, Function.comp_apply]
+        rw [h1]
+      have heq2 : (TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))).dualMap
+                   (g ∘ₗ TensorObj.liftMap (fun i : σ.S => LinearMap.fst K (X.V ↑i) (Y.V ↑i))) = 0 := by
+        apply LinearMap.ext; intro t
+        simp only [LinearMap.dualMap_apply, LinearMap.coe_comp, Function.comp_apply,
+          LinearMap.zero_apply]
+        rw [h2, map_zero]
+      -- Simplify using heq1 and heq2
+      calc (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ X)
+                ((TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))).dualMap
+                  (g ∘ₗ TensorObj.liftMap (fun i : σ.S => LinearMap.fst K (X.V ↑i) (Y.V ↑i))))) +
+            (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ Y)
+                ((TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))).dualMap
+                  (g ∘ₗ TensorObj.liftMap (fun i : σ.S => LinearMap.fst K (X.V ↑i) (Y.V ↑i)))))
+        = (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ X) g) +
+            (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ Y) 0) := by rw [heq1, heq2]
+        _ = (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ X) g) + 0 := by rw [map_zero, map_zero]
+        _ = _ := by rw [add_zero]
+    · -- liftMap inr (range flatteningMap Y) ⊆ range (flatteningMap (X + Y))
+      intro t ht
+      simp only [Submodule.mem_map, LinearMap.mem_range] at ht
+      obtain ⟨y, ⟨g, rfl⟩, rfl⟩ := ht
+      simp only [LinearMap.mem_range]
+      let snd_dual : Dual K (⨂[K] (i : σ.S), (X + Y).V ↑i) :=
+        g.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i)))
+      use snd_dual
+      simp only [LinearMap.add_apply, LinearMap.coe_comp, Function.comp_apply, snd_dual]
+      have h1 : ∀ t, (TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i)))
+                     ((TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))) t) = 0 := by
+        intro t
+        rw [TensorObj.liftMap_comp]
+        simp only [LinearMap.snd_comp_inl]
+        induction t using PiTensorProduct.induction_on with
+        | smul_tprod r v =>
+          simp only [map_smul, TensorObj.liftMap_tprod, LinearMap.zero_apply]
+          obtain ⟨i₀, hi₀⟩ := σ.hS
+          rw [(PiTensorProduct.tprod K (s := fun i : σ.S => Y.V ↑i)).map_coord_zero ⟨i₀, hi₀⟩ rfl]
+          simp only [smul_zero]
+        | add x y ihx ihy =>
+          simp only [map_add, ihx, ihy, add_zero]
+      have h2 : ∀ t, (TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i)))
+                     ((TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))) t) = t := by
+        intro t
+        rw [TensorObj.liftMap_comp]
+        simp only [LinearMap.snd_comp_inr]
+        induction t using PiTensorProduct.induction_on with
+        | smul_tprod r v =>
+          simp only [map_smul, TensorObj.liftMap_tprod, LinearMap.id_coe, id_eq]
+        | add x y ihx ihy =>
+          simp only [map_add, ihx, ihy]
+      -- Similar to the first case, we need to construct heq1 and heq2
+      have heq1 : (TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))).dualMap
+                   (g ∘ₗ TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i))) = 0 := by
+        apply LinearMap.ext; intro t
+        simp only [LinearMap.dualMap_apply, LinearMap.coe_comp, Function.comp_apply,
+          LinearMap.zero_apply]
+        rw [h1, map_zero]
+      have heq2 : (TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))).dualMap
+                   (g ∘ₗ TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i))) = g := by
+        apply LinearMap.ext; intro t
+        simp only [LinearMap.dualMap_apply, LinearMap.coe_comp, Function.comp_apply]
+        rw [h2]
+      calc (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ X)
+                ((TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))).dualMap
+                  (g ∘ₗ TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i))))) +
+            (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ Y)
+                ((TensorObj.liftMap (fun i : σ.S => LinearMap.inr K (X.V ↑i) (Y.V ↑i))).dualMap
+                  (g ∘ₗ TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i)))))
+        = (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ X) 0) +
+            (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ Y) g) := by rw [heq1, heq2]
+        _ = 0 + (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i)))
+              ((flatteningMap σ Y) g) := by rw [map_zero, map_zero]
+        _ = _ := by rw [zero_add]
+
+/-- The two ranges are disjoint (they land in orthogonal product components). -/
+theorem flatteningMap_add_range_disjoint (X Y : TensorObj K d) :
+    Disjoint
+      (Submodule.map (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V i) (Y.V i)))
+                     (LinearMap.range (flatteningMap σ X)))
+      (Submodule.map (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V i) (Y.V i)))
+                     (LinearMap.range (flatteningMap σ Y))) := by
+  -- The key is that liftMap inl and liftMap inr have disjoint ranges
+  -- Use liftMap with the projection to show disjointness
+  rw [Submodule.disjoint_def]
+  intro t ht_inl ht_inr
+  -- t is in both mapped ranges
+  simp only [Submodule.mem_map, LinearMap.mem_range] at ht_inl ht_inr
+  obtain ⟨x, ⟨fx, hfx⟩, rfl⟩ := ht_inl
+  obtain ⟨y, ⟨fy, hfy⟩, hy⟩ := ht_inr
+  -- liftMap inl fx = liftMap inr fy
+  -- Apply liftMap (snd) to both sides: get 0 on left and fy on right
+  -- So liftMap inr fy = 0, hence fy = 0 (since liftMap inr is injective)
+  -- Define the projection to the second component
+  -- Note: for i : Sc σ, the type is X.V ↑i × Y.V ↑i
+  let snd : ∀ i : Sc σ, X.V ↑i × Y.V ↑i →ₗ[K] Y.V ↑i := fun i => LinearMap.snd K (X.V ↑i) (Y.V ↑i)
+  -- liftMap snd ∘ liftMap inl = 0
+  have h_snd_inl : TensorObj.liftMap snd ∘ₗ TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i)) = 0 := by
+    ext v
+    simp only [LinearMap.compMultilinearMap_apply, LinearMap.coe_comp, Function.comp_apply,
+      LinearMap.zero_apply, TensorObj.liftMap_tprod]
+    -- Goal: tprod K (fun i => snd i (inl (v i))) = 0
+    -- snd (inl v) = 0 for all i
+    simp only [snd, LinearMap.snd_apply, LinearMap.inl_apply]
+    -- tprod K (fun _ => 0) = 0
+    -- Use that tprod is multilinear, so tprod with a zero component is zero
+    -- Sc σ is nonempty since it's the complement of S in Fin d
+    obtain ⟨i₀, hi₀⟩ := σ.hSc
+    apply (PiTensorProduct.tprod K (s := fun i : Sc σ => Y.V ↑i)).map_coord_zero ⟨i₀, hi₀⟩
+    rfl
+  -- liftMap snd ∘ liftMap inr = liftMap id = id
+  have h_snd_inr : TensorObj.liftMap snd ∘ₗ TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i)) = LinearMap.id := by
+    ext v
+    simp only [LinearMap.compMultilinearMap_apply, LinearMap.coe_comp, Function.comp_apply,
+      LinearMap.id_coe, id_eq, TensorObj.liftMap_tprod]
+    -- Goal: tprod K (fun i => snd i (inr (v i))) = tprod K v
+    -- snd (inr v) = v for all i
+    simp only [snd, LinearMap.snd_apply, LinearMap.inr_apply]
+  -- From hy: liftMap inl x = liftMap inr y
+  -- Apply liftMap snd to both sides
+  -- liftMap snd (liftMap inl x) = 0
+  -- liftMap snd (liftMap inr y) = y
+  -- So y = 0
+  have hy_eq : TensorObj.liftMap snd (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V ↑i) (Y.V ↑i)) y) = y := by
+    rw [← LinearMap.comp_apply, h_snd_inr]
+    simp only [LinearMap.id_coe, id_eq]
+  have hx_eq : TensorObj.liftMap snd (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V ↑i) (Y.V ↑i)) x) = 0 := by
+    rw [← LinearMap.comp_apply, h_snd_inl]
+    simp only [LinearMap.zero_apply]
+  -- hy says liftMap inr y = liftMap inl x
+  rw [hy] at hy_eq
+  rw [hx_eq] at hy_eq
+  -- Now y = 0
+  -- So liftMap inl x = liftMap inr 0 = 0
+  rw [← hy_eq, map_zero] at hy
+  exact hy.symm
+
+/-- For disjoint submodules, finrank of sup equals sum of finranks. -/
+theorem finrank_sup_of_disjoint {V : Type*} [AddCommGroup V] [Module K V]
+    (s t : Submodule K V) [FiniteDimensional K s] [FiniteDimensional K t]
+    (h : Disjoint s t) :
+    finrank K (s ⊔ t : Submodule K V) = finrank K s + finrank K t := by
+  have := Submodule.finrank_sup_add_finrank_inf_eq s t
+  rw [h.eq_bot, finrank_bot, add_zero] at this
+  exact this
+
+/-- Finrank of mapped submodule under injective map.
+    This follows from LinearMap.finrank_range_of_inj applied to the restriction. -/
+theorem finrank_map_of_injective {M N : Type*}
+    [AddCommGroup M] [Module K M] [AddCommGroup N] [Module K N]
+    (f : M →ₗ[K] N) (hf : Function.Injective f) (S : Submodule K M)
+    [FiniteDimensional K S] :
+    finrank K (Submodule.map f S) = finrank K S := by
+  -- S.map f is isomorphic to S via the injective f
+  have : LinearMap.range (f.domRestrict S) = S.map f := by
+    ext x
+    simp only [LinearMap.mem_range, LinearMap.domRestrict_apply, Submodule.mem_map]
+    constructor
+    · rintro ⟨⟨s, hs⟩, rfl⟩
+      exact ⟨s, hs, rfl⟩
+    · rintro ⟨s, hs, rfl⟩
+      exact ⟨⟨s, hs⟩, rfl⟩
+  rw [← this]
+  apply LinearMap.finrank_range_of_inj
+  intro ⟨x, hx⟩ ⟨y, hy⟩ h
+  simp only [LinearMap.domRestrict_apply] at h
+  exact Subtype.ext (hf h)
+
+/-- liftMap is injective when all component maps are injective. -/
+theorem TensorObj.liftMap_injective_of_injective {ι : Type*} [Fintype ι] [DecidableEq ι]
+    {V W : ι → Type*}
+    [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
+    [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
+    (f : ∀ i, V i →ₗ[K] W i) (hf : ∀ i, Function.Injective (f i)) :
+    Function.Injective (TensorObj.liftMap f) := by
+  -- Over a field, each injective linear map has a linear left inverse
+  -- The key insight: liftMap g ∘ liftMap f = id when g i ∘ f i = id
+  classical
+  -- For each i, construct a linear left inverse using LinearEquiv.ofInjective
+  -- The range of f i is a submodule, and f i gives an isomorphism V i ≃ range (f i)
+  -- Then we can extend this to a left inverse W i → V i
+  let e := fun i => LinearEquiv.ofInjective (f i) (hf i)
+  -- e i : V i ≃ₗ[K] LinearMap.range (f i)
+  -- We need a left inverse W i → V i
+  -- Over a field, we can project onto the range and then apply e.symm
+  -- But this requires choosing a complement, which exists over a field
+  -- For now, use a simple approach: the left inverse exists abstractly
+  have hleft : ∀ i, ∃ g : W i →ₗ[K] V i, g ∘ₗ f i = LinearMap.id := by
+    intro i
+    -- Use that f i is injective, so it has a left inverse as a linear map
+    -- Over a field, the range has a complement, so we can project and then apply e.symm
+    -- Use Submodule.linearProjOfIsCompl with a complement
+    haveI : Module.Free K (W i) := Module.Free.of_divisionRing K (W i)
+    obtain ⟨C, hC⟩ := Submodule.exists_isCompl (LinearMap.range (f i))
+    let proj := Submodule.linearProjOfIsCompl _ C hC
+    use (e i).symm.toLinearMap ∘ₗ proj
+    ext x
+    simp only [LinearMap.coe_comp, Function.comp_apply, LinearMap.id_coe, id_eq]
+    -- f i x is in the range, so we can use the projection property
+    have hx : f i x ∈ LinearMap.range (f i) := LinearMap.mem_range_self (f i) x
+    -- proj (f i x) = ⟨f i x, hx⟩ as an element of the subtype
+    rw [Submodule.linearProjOfIsCompl_apply_left hC ⟨f i x, hx⟩]
+    -- (e i).symm ⟨f i x, hx⟩ = x because e i x = ⟨f i x, _⟩
+    -- Use that (e i).symm is the inverse of (e i)
+    have heq : (e i) x = ⟨f i x, hx⟩ := by
+      ext
+      rfl
+    rw [← heq]
+    exact (e i).symm_apply_apply x
+  choose g hg using hleft
+  -- Now show liftMap g ∘ liftMap f = id
+  have hcomp : ∀ t, TensorObj.liftMap g (TensorObj.liftMap f t) = t := by
+    intro t
+    rw [TensorObj.liftMap_comp]
+    have : (fun i => (g i).comp (f i)) = fun i => LinearMap.id := funext (fun i => hg i)
+    rw [this]
+    -- liftMap id = id
+    induction t using PiTensorProduct.induction_on with
+    | smul_tprod r v =>
+      simp only [map_smul, TensorObj.liftMap_tprod, LinearMap.id_coe, id_eq]
+    | add x y ihx ihy =>
+      simp only [map_add, ihx, ihy]
+  exact Function.LeftInverse.injective hcomp
+
+end FlatteningRankAdd
+
 theorem flatteningRank_add
     (x y : Tensor K d) :
     flatteningRank σ (x + y)
@@ -444,32 +922,64 @@ theorem flatteningRank_add
   change flatteningRank σ (Tensor.add (Tensor.toTensor X) (Tensor.toTensor Y)) =
          flatteningRank σ (Tensor.toTensor X) + flatteningRank σ (Tensor.toTensor Y)
   simp only [Tensor.add, flatteningRank_mk]
-  -- Now the goal is: AsymptoticSpectra.flatteningRank σ (X + Y) =
-  --                  AsymptoticSpectra.flatteningRank σ X + AsymptoticSpectra.flatteningRank σ Y
-  --
-  -- Mathematical outline:
-  -- 1. (X + Y).V i = X.V i × Y.V i (direct sum of vector spaces)
-  -- 2. (X + Y).t = liftMap inl X.t + liftMap inr Y.t
-  --
-  -- 3. splitTensorEquiv σ is linear, so:
-  --    splitTensorEquiv σ (X + Y).t =
-  --      splitTensorEquiv σ (liftMap inl X.t) + splitTensorEquiv σ (liftMap inr Y.t)
-  --
-  -- 4. The key naturality: splitTensorEquiv σ (liftMap f t) relates to
-  --    (map f_S ⊗ map f_Sc) (splitTensorEquiv σ t)
-  --    This follows from splitTensorEquiv_naturality.
-  --
-  -- 5. For the direct sum structure, the flattening maps have orthogonal ranges:
-  --    - flatteningMap σ (X + Y) applied to (inl ∘ f) gives output in (inl image)
-  --    - flatteningMap σ (X + Y) applied to (inr ∘ g) gives output in (inr image)
-  --
-  -- 6. The range of the sum is the direct sum of ranges, so:
-  --    finrank(range(flatteningMap σ (X + Y))) =
-  --      finrank(range(flatteningMap σ X)) + finrank(range(flatteningMap σ Y))
-  --
-  -- This proof requires establishing the naturality of flatteningMap with respect to
-  -- the direct sum structure and showing the ranges are in direct sum position.
-  sorry
+
+  -- Setup FiniteDimensional instances
+  haveI := X.finiteDimensional
+  haveI := Y.finiteDimensional
+
+  let BS := PiTensorProduct K (fun i : Sc σ => X.V i)
+  let BT := PiTensorProduct K (fun i : Sc σ => Y.V i)
+
+  haveI : FiniteDimensional K BS :=
+    Module.Finite.of_basis (Basis.piTensorProduct (fun i => Module.Free.chooseBasis K (X.V i)))
+  haveI : FiniteDimensional K BT :=
+    Module.Finite.of_basis (Basis.piTensorProduct (fun i => Module.Free.chooseBasis K (Y.V i)))
+
+  -- Rewrite flatteningRank as finrank of range
+  -- First, simplify the LHS using the quotient structure
+  show AsymptoticSpectra.flatteningRank σ (X + Y) =
+       AsymptoticSpectra.flatteningRank σ X + AsymptoticSpectra.flatteningRank σ Y
+  unfold AsymptoticSpectra.flatteningRank
+
+  -- Apply flatteningMap_add_range to decompose the range
+  rw [flatteningMap_add_range X Y]
+
+  -- Define abbreviations for the mapped submodules
+  set sX := Submodule.map (TensorObj.liftMap (fun i : Sc σ => LinearMap.inl K (X.V i) (Y.V i)))
+                          (LinearMap.range (flatteningMap σ X)) with hsX
+  set sY := Submodule.map (TensorObj.liftMap (fun i : Sc σ => LinearMap.inr K (X.V i) (Y.V i)))
+                          (LinearMap.range (flatteningMap σ Y)) with hsY
+
+  -- Need FiniteDimensional instances for the mapped submodules
+  haveI : FiniteDimensional K sX := inferInstance
+  haveI : FiniteDimensional K sY := inferInstance
+
+  -- Now show that finrank of each mapped submodule equals the original finrank
+  -- using injectivity of liftMap inl/inr
+
+  -- For the X component:
+  have hX : finrank K sX = finrank K (LinearMap.range (flatteningMap σ X)) := by
+    rw [hsX]
+    apply finrank_map_of_injective
+    apply TensorObj.liftMap_injective_of_injective
+    intro i
+    exact LinearMap.inl_injective
+
+  -- For the Y component:
+  have hY : finrank K sY = finrank K (LinearMap.range (flatteningMap σ Y)) := by
+    rw [hsY]
+    apply finrank_map_of_injective
+    apply TensorObj.liftMap_injective_of_injective
+    intro i
+    exact LinearMap.inr_injective
+
+  -- The two ranges are disjoint, so finrank of sup equals sum of finranks
+  have h_disjoint : Disjoint sX sY := flatteningMap_add_range_disjoint X Y
+  have h_sup := finrank_sup_of_disjoint sX sY h_disjoint
+  calc finrank K ↥(sX ⊔ sY)
+      = finrank K ↥sX + finrank K ↥sY := h_sup
+    _ = finrank K ↥(flatteningMap σ X).range + finrank K ↥sY := by rw [hX]
+    _ = finrank K ↥(flatteningMap σ X).range + finrank K ↥(flatteningMap σ Y).range := by rw [hY]
 
 /-- Auxiliary bilinear map for the distributivity construction.
     For fixed v' and w', the map (v, w) ↦ (tprod (update v' i v)) ⊗ (tprod (update w' i w))
@@ -591,7 +1101,6 @@ private theorem piTensorDistribMultilinear_exists {ι : Type*} [Fintype ι] [Dec
       let subsingleV := (PiTensorProduct.subsingletonEquiv (R := K) (s := fun _ : PUnit.{1} => V i₀) PUnit.unit).symm
       let subsingleW := (PiTensorProduct.subsingletonEquiv (R := K) (s := fun _ : PUnit.{1} => W i₀) PUnit.unit).symm
 
-      -- Define combineV and combineW as functions (we'll prove they're bilinear via sorry)
       let combineV_fun : V i₀ → PiTensorProduct K V' → PiTensorProduct K V := fun v₀ tV' =>
         (PiTensorProduct.reindex K V eSum).symm
           ((PiTensorProduct.tmulEquivDep K Vsum) (tV' ⊗ₜ[K] subsingleV v₀))
