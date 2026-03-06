@@ -475,41 +475,28 @@ theorem add_comm_isomorphic {X Y : TensorObj K d} : Isomorphic (X + Y) (Y + X) :
 
 theorem add_assoc_isomorphic {X Y Z : TensorObj K d} : Isomorphic (X + Y + Z) (X + (Y + Z)) := by
   refine ⟨{ equiv := fun i => prodAssoc, map_t := ?_ }⟩
-  have add_def (A B : TensorObj K d) : (A + B).t =
-      liftMap (fun i => LinearMap.inl K (A.V i) (B.V i)) A.t +
-      liftMap (fun i => LinearMap.inr K (A.V i) (B.V i)) B.t := rfl
-  rw [add_def (X + Y) Z, add_def X Y]
-  rw [add_def X (Y + Z), add_def Y Z]
-
-  -- Distribute liftMap
-  simp only [map_add]
-
-  -- Reassociate LHS sums to match RHS structure
-  rw [add_assoc]
-
-  refine congr_arg₂ (· + ·) ?_ ?_
-  · -- Term X
-    conv_lhs => repeat erw [liftMap_comp]
-    conv_rhs => repeat erw [liftMap_comp]
-    apply congr_arg (fun h => liftMap h _)
-    funext i; ext v
-    dsimp [prodAssoc, LinearMap.inl, LinearMap.inr]
-    apply Prod.ext <;> try rfl
-  · refine congr_arg₂ (· + ·) ?_ ?_
-    · -- Term Y
-      conv_lhs => repeat erw [liftMap_comp]
-      conv_rhs => repeat erw [liftMap_comp]
-      apply congr_arg (fun h => liftMap h _)
-      funext i; ext v
-      dsimp [prodAssoc, LinearMap.inl, LinearMap.inr]
-      apply Prod.ext <;> try rfl
-    · -- Term Z
-      conv_lhs => repeat erw [liftMap_comp]
-      conv_rhs => repeat erw [liftMap_comp]
-      apply congr_arg (fun h => liftMap h _)
-      funext i; ext v
-      dsimp [prodAssoc, LinearMap.inl, LinearMap.inr]
-      apply Prod.ext <;> try rfl
+  simp only [TensorObj.add_t]
+  erw [(liftMap (fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)).map_add,
+       (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))).map_add,
+       (liftMap (fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)).map_add,
+       (liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))).map_add]
+  have hA : (liftMap fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)
+      ((liftMap fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        ((liftMap fun i => LinearMap.inl K (X.V i) (Y.V i)) X.t)) =
+      (liftMap fun i => LinearMap.inl K (X.V i) ((Y + Z).V i)) X.t := by
+    erw [liftMap_comp, liftMap_comp]; congr 1
+  have hB : (liftMap fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)
+      ((liftMap fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        ((liftMap fun i => LinearMap.inr K (X.V i) (Y.V i)) Y.t)) =
+      (liftMap fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+        ((liftMap fun i => LinearMap.inl K (Y.V i) (Z.V i)) Y.t) := by
+    erw [liftMap_comp, liftMap_comp, liftMap_comp]; congr 1
+  have hC : (liftMap fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)
+      ((liftMap fun i => LinearMap.inr K ((X + Y).V i) (Z.V i)) Z.t) =
+      (liftMap fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+        ((liftMap fun i => LinearMap.inr K (Y.V i) (Z.V i)) Z.t) := by
+    erw [liftMap_comp, liftMap_comp]; congr 1
+  rw [hA, hB, hC]; abel
 
 theorem mul_isomorphic {X Y Z W : TensorObj K d} (h1 : Isomorphic X Y) (h2 : Isomorphic Z W) :
     Isomorphic (X * Z) (Y * W) := by
@@ -597,7 +584,7 @@ theorem add_zero_isomorphic {X : TensorObj K d} : Isomorphic (X + zeroObj) X := 
   -- (X + 0).t = liftMap inl X.t + liftMap inr 0
   -- 0 in TensorObj.zeroObj is 0
   change liftMap _ (liftMap (fun i => LinearMap.inl K (X.V i) (TensorObj.zeroObj.V i)) X.t + 0) = _
-  rw [add_zero]
+  erw [(liftMap _).map_add, (liftMap _).map_zero, add_zero]
   erw [liftMap_comp]
   convert liftMap_id X using 2
 
@@ -605,7 +592,7 @@ theorem add_zero_isomorphic {X : TensorObj K d} : Isomorphic (X + zeroObj) X := 
 theorem zero_add_isomorphic {X : TensorObj K d} : Isomorphic (zeroObj + X) X := by
   refine ⟨{ equiv := fun i => prodZero, map_t := ?_ }⟩
   change liftMap _ (0 + liftMap (fun i => LinearMap.inr K (TensorObj.zeroObj.V i) (X.V i)) X.t) = _
-  rw [zero_add]
+  erw [(liftMap _).map_add, (liftMap _).map_zero, zero_add]
   erw [liftMap_comp]
   convert liftMap_id X using 2
 
@@ -692,7 +679,7 @@ theorem zero_mul_isomorphic {X : TensorObj K d} : Isomorphic (zeroObj * X) zeroO
   refine ⟨{ equiv := fun i => tensorZero (V := X.V i), map_t := ?_ }⟩
   change liftMap (fun i => (tensorZero (V := X.V i)).toLinearMap) (interchange zeroObj.t X.t) = zeroObj.t
   dsimp [zeroObj] -- 0
-  rw [map_zero, LinearMap.zero_apply, map_zero]
+  erw [map_zero]
 end TensorObj
 
 /-- The quotient of `TensorObj` by linear isomorphism. -/
