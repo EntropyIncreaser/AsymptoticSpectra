@@ -115,7 +115,8 @@ lemma IsSubexponential.mul {f g : ℕ → ℕ} (hf : IsSubexponential f) (hg : I
   let η := Real.sqrt (1 + ε) - 1
   have hη : 0 < η := by
     dsimp [η]
-    rw [sub_pos]
+    have h : (0 : ℝ) < √(1 + ε) - 1 ↔ 1 < √(1 + ε) := sub_pos
+    rw [h]
     apply Real.lt_sqrt_of_sq_lt
     linarith
   specialize hf η hη
@@ -210,7 +211,8 @@ lemma AsymptoticLe.nat_order_embedding (P : StrassenPreorder R) (n m : ℕ) :
     push_neg at h_gt
     let δ : ℝ := (n : ℝ) / (m : ℝ) - 1
     have hδ : 0 < δ := by
-      rw [sub_pos]
+      have h : (0 : ℝ) < (n : ℝ) / (m : ℝ) - 1 ↔ _ < _ := sub_pos
+      rw [h]
       apply (one_lt_div (by exact_mod_cast hm_pos)).mpr
       exact_mod_cast h_gt
     specialize hf (δ / 2) (half_pos hδ)
@@ -377,7 +379,8 @@ theorem asymptoticClosure_isClosed (P : StrassenPreorder R) :
     specialize hle 1
     simp only [pow_one, mul_zero] at hle
     exact hle
-  · rw [asymptoticLe_iff_relative_rank_subexponential hb]
+  · show AsymptoticLe P a b
+    rw [asymptoticLe_iff_relative_rank_subexponential hb]
     let hb_pow : ∀ n, b ^ n ≠ 0 := fun n => StrassenPreorder.pow_ne_zero P n hb
     obtain ⟨f, hf, hle⟩ := h
     let f' := fun n => max 1 (f n)

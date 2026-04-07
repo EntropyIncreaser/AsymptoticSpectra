@@ -1,4 +1,5 @@
 import Mathlib.Topology.Instances.Real.Lemmas
+import Mathlib.Algebra.Order.Field.Basic
 import Mathlib.Analysis.SpecialFunctions.Pow.Continuity
 import Mathlib.Analysis.SpecialFunctions.Exp
 import Mathlib.Analysis.Subadditive
@@ -31,12 +32,9 @@ theorem tends_to_lim (h1 : ∀ n, 1 ≤ u n) :
   have hbdd : BddBelow (range fun n => v n / n) := by
     use 0
     rintro _ ⟨n, rfl⟩
-    rw [div_nonneg_iff]
-    left
-    constructor
-    · apply Real.log_nonneg
-      exact h1 n
-    · exact Nat.cast_nonneg n
+    exact div_nonneg_iff.mpr (Or.inl ⟨
+      by apply Real.log_nonneg; exact h1 n,
+      Nat.cast_nonneg n⟩)
 
   have hlim : Tendsto (fun n => v n / n) atTop (𝓝 hv.lim) :=
     Subadditive.tendsto_lim hv hbdd

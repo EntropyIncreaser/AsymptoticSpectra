@@ -542,8 +542,8 @@ theorem baseChange_zero (L : Type w) [Field L] [Algebra K L] :
       map_add' := fun _ _ => rfl
       map_smul' := fun _ _ => rfl }
   refine ⟨⟨e, ?_⟩⟩
-  dsimp [zeroObj, baseChange_t, liftMap]
-  rw [TensorProduct.tmul_zero, map_zero, map_zero]
+  simp only [baseChange_t, zeroObj, TensorProduct.tmul_zero, map_zero]
+  apply (liftMap (fun i => (e i).toLinearMap)).map_zero
 
 /-- Base change preserves one up to isomorphism. -/
 theorem baseChange_one (L : Type w) [Field L] [Algebra K L] :

@@ -141,9 +141,9 @@ theorem toStrassenPreorder_isTotal {R : Type u} [CommSemiring R] {P : StrassenPr
 theorem toStrassenPreorder_isClosed {R : Type u} [CommSemiring R] {P : StrassenPreorder R}
     (ϕ : AsymptoticSpectrumPoint R P) : ϕ.toStrassenPreorder.IsClosed := by
   intro a b h
-  dsimp [toStrassenPreorder]
+  show ϕ a ≤ ϕ b
   obtain ⟨f, hf, hle⟩ := h
-  dsimp [toStrassenPreorder] at hle
+  change ∀ n, ϕ (a^n) ≤ ϕ (↑(f n) * b^n) at hle
   have h_phi_le : ∀ n, (ϕ a)^n ≤ f n * (ϕ b)^n := by
     intro n
     specialize hle n
@@ -216,7 +216,7 @@ theorem rho_of_toStrassenPreorder {R : Type u} [CommSemiring R] {P : StrassenPre
       let n := q.num.toNat
       let m := q.den
       refine ⟨n, m, q.pos, ?_, ?_⟩
-      · dsimp [Q, toStrassenPreorder]
+      · show ϕ ((↑m : R) * a) ≤ ϕ (↑n : R)
         rw [map_mul, map_natCast, map_natCast]
         have hq_val : (q : ℝ) = (n : ℝ) / (m : ℝ) := by
           rw [Rat.cast_def q]
@@ -232,7 +232,7 @@ theorem rho_of_toStrassenPreorder {R : Type u} [CommSemiring R] {P : StrassenPre
     exact lt_of_le_of_lt this hq2
   · apply le_csInf (Q.rho_set_nonempty a)
     rintro x ⟨n, m, hm, h, rfl⟩
-    dsimp [Q, toStrassenPreorder] at h
+    change ϕ ((↑m : R) * a) ≤ ϕ (↑n : R) at h
     rw [map_mul, map_natCast, map_natCast] at h
     have h_m_pos : 0 < (m : ℝ) := Nat.cast_pos.mpr hm
     rw [le_div_iff₀ h_m_pos, mul_comm]

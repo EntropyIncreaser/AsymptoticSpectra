@@ -1,6 +1,7 @@
 import AsymptoticSpectra.Tensor.Tensor
+import AsymptoticSpectra.Tensor.Flattening
 import AsymptoticSpectra.Structures
-
+import AsymptoticSpectra.Spectrum
 
 universe u v w
 
@@ -85,9 +86,16 @@ instance instSemiringPreorder : SemiringPreorder (Tensor K d) where
   mul_right := fun _ _ h _ => by sorry
   zero_le := fun _ => by sorry
 
+theorem flatteningRank_mono (σ : AsymptoticSpectra.Split (Fin d)) :
+  ∀ {x y : Tensor K d}, x ≤ y → AsymptoticSpectra.Tensor.flatteningRankReal σ x ≤ AsymptoticSpectra.Tensor.flatteningRankReal σ y := by
+    sorry
+
 instance : StrassenPreorder (Tensor K d) where
   toSemiringPreorder := instSemiringPreorder
-  nat_order_embedding := fun _ _ => by sorry
+  nat_order_embedding := by
+    have σ : AsymptoticSpectra.Split (Fin d) :=
+      ⟨{0}, Finset.singleton_nonempty _, ⟨1, by simp; exact Nat.ne_of_gt Fact.out⟩⟩
+    exact spectrumPoint_implies_nat_order_embedding (AsymptoticSpectra.Tensor.FlatteningRankPoint σ instSemiringPreorder (flatteningRank_mono σ))
   lower_archimedean := fun _ => by sorry
   upper_archimedean := fun _ => by sorry
 
