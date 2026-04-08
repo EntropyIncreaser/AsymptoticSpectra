@@ -618,7 +618,7 @@ theorem flatteningMap_add_range (X Y : TensorObj K d) :
       let fst_dual : Dual K (⨂[K] (i : σ.S), (X + Y).V ↑i) :=
         g.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.fst K (X.V ↑i) (Y.V ↑i)))
       use fst_dual
-      simp only [LinearMap.add_apply, LinearMap.coe_comp, Function.comp_apply, fst_dual]
+      simp only [fst_dual]
       -- liftMap inl (flatteningMap X (g ∘ fst ∘ liftMap inl)) + liftMap inr (flatteningMap Y (g ∘ fst ∘ liftMap inr))
       -- fst ∘ inl = id, so g ∘ fst ∘ liftMap inl = g ∘ liftMap id = g
       -- fst ∘ inr = 0, so g ∘ fst ∘ liftMap inr = 0
@@ -685,7 +685,7 @@ theorem flatteningMap_add_range (X Y : TensorObj K d) :
       let snd_dual : Dual K (⨂[K] (i : σ.S), (X + Y).V ↑i) :=
         g.comp (TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i)))
       use snd_dual
-      simp only [LinearMap.add_apply, LinearMap.coe_comp, Function.comp_apply, snd_dual]
+      simp only [snd_dual]
       have h1 : ∀ t, (TensorObj.liftMap (fun i : σ.S => LinearMap.snd K (X.V ↑i) (Y.V ↑i)))
                      ((TensorObj.liftMap (fun i : σ.S => LinearMap.inl K (X.V ↑i) (Y.V ↑i))) t) = 0 := by
         intro t
@@ -1000,7 +1000,95 @@ private noncomputable def tprodTensorBilin {ι : Type*} [Fintype ι] [DecidableE
     simp only [MultilinearMap.coe_mk, MultilinearMap.smul_apply,
       MultilinearMap.map_update_smul, smul_tmul']
 
-set_option maxHeartbeats 800000 in
+/-- Inner bilinear map used in piTensorDistribMultilinear_exists. -/
+private noncomputable def mkInnerBilin {ι : Type*} [Fintype ι] [DecidableEq ι]
+    {V W : ι → Type*}
+    [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
+    [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
+    {α : Type*} [Fintype α] [DecidableEq α]
+    (e : ι ≃ Option α)
+    (V' : α → Type _) (W' : α → Type _)
+    [∀ a, AddCommGroup (V' a)] [∀ a, Module K (V' a)]
+    [∀ a, AddCommGroup (W' a)] [∀ a, Module K (W' a)]
+    (combineV_fun : V (e.symm none) → PiTensorProduct K V' → PiTensorProduct K V)
+    (combineW_fun : W (e.symm none) → PiTensorProduct K W' → PiTensorProduct K W)
+    (combineW_add  : ∀ tW' x y, combineW_fun (x + y) tW' = combineW_fun x tW' + combineW_fun y tW')
+    (combineW_smul : ∀ tW' (c : K) x, combineW_fun (c • x) tW' = c • combineW_fun x tW')
+    (combineV_add  : ∀ tV' x y, combineV_fun (x + y) tV' = combineV_fun x tV' + combineV_fun y tV')
+    (combineV_smul : ∀ tV' (c : K) x, combineV_fun (c • x) tV' = c • combineV_fun x tV')
+    (combineW_add' : ∀ w₀ x y, combineW_fun w₀ (x + y) = combineW_fun w₀ x + combineW_fun w₀ y)
+    (combineW_smul' : ∀ w₀ (c : K) x, combineW_fun w₀ (c • x) = c • combineW_fun w₀ x)
+    (combineV_add' : ∀ v₀ x y, combineV_fun v₀ (x + y) = combineV_fun v₀ x + combineV_fun v₀ y)
+    (combineV_smul' : ∀ v₀ (c : K) x, combineV_fun v₀ (c • x) = c • combineV_fun v₀ x) :
+    (PiTensorProduct K V') →ₗ[K] (PiTensorProduct K W') →ₗ[K]
+        (V (e.symm none) →ₗ[K] W (e.symm none) →ₗ[K]
+            (PiTensorProduct K V) ⊗[K] (PiTensorProduct K W)) :=
+  { toFun := fun tV' =>
+      { toFun := fun tW' =>
+          { toFun := fun v₀ =>
+              { toFun := fun w₀ => combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ tW'
+                map_add' := fun x y => by
+                  rw [combineW_add]
+                  erw [show combineV_fun v₀ tV' ⊗ₜ[K] (combineW_fun x tW' + combineW_fun y tW') =
+                      combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun x tW' +
+                      combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun y tW' from
+                    TensorProduct.tmul_add _ _ _]
+                map_smul' := fun c x => by
+                  rw [combineW_smul]
+                  simp only [RingHom.id_apply]
+                  erw [show combineV_fun v₀ tV' ⊗ₜ[K] (c • combineW_fun x tW') =
+                      c • (combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun x tW') from
+                    TensorProduct.tmul_smul c _ _] }
+            map_add' := fun x y => by
+              ext w₀
+              simp only [LinearMap.coe_mk, AddHom.coe_mk, LinearMap.add_apply]
+              rw [combineV_add]
+              erw [show (combineV_fun x tV' + combineV_fun y tV') ⊗ₜ[K] combineW_fun w₀ tW' =
+                  combineV_fun x tV' ⊗ₜ[K] combineW_fun w₀ tW' +
+                  combineV_fun y tV' ⊗ₜ[K] combineW_fun w₀ tW' from
+                TensorProduct.add_tmul _ _ _]
+            map_smul' := fun c x => by
+              ext w₀
+              simp only [LinearMap.coe_mk, AddHom.coe_mk, RingHom.id_apply, LinearMap.smul_apply]
+              rw [combineV_smul]
+              erw [show (c • combineV_fun x tV') ⊗ₜ[K] combineW_fun w₀ tW' =
+                  c • (combineV_fun x tV' ⊗ₜ[K] combineW_fun w₀ tW') from
+                TensorProduct.smul_tmul' c _ _] }
+        map_add' := fun x y => by
+          ext v₀ w₀
+          simp only [LinearMap.coe_mk, AddHom.coe_mk, LinearMap.add_apply]
+          rw [combineW_add']
+          erw [show combineV_fun v₀ tV' ⊗ₜ[K] (combineW_fun w₀ x + combineW_fun w₀ y) =
+              combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ x +
+              combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ y from
+            TensorProduct.tmul_add _ _ _]
+        map_smul' := fun c x => by
+          ext v₀ w₀
+          simp only [LinearMap.coe_mk, AddHom.coe_mk, LinearMap.smul_apply, RingHom.id_apply]
+          rw [combineW_smul']
+          erw [show combineV_fun v₀ tV' ⊗ₜ[K] (c • combineW_fun w₀ x) =
+              c • (combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ x) from
+            TensorProduct.tmul_smul c _ _] }
+    map_add' := fun x y => by
+      apply PiTensorProduct.ext
+      ext tW' v₀ w₀
+      simp only [LinearMap.compMultilinearMap_apply]
+      show combineV_fun v₀ (x + y) ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW') =
+        combineV_fun v₀ x ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW') +
+        combineV_fun v₀ y ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW')
+      rw [combineV_add']
+      erw [TensorProduct.add_tmul]
+    map_smul' := fun c x => by
+      apply PiTensorProduct.ext
+      ext tW' v₀ w₀
+      simp only [LinearMap.compMultilinearMap_apply, RingHom.id_apply]
+      show combineV_fun v₀ (c • x) ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW') =
+        c • (combineV_fun v₀ x ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW'))
+      rw [combineV_smul']
+      erw [show (c • combineV_fun v₀ x) ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW') =
+          c • (combineV_fun v₀ x ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW')) from
+        TensorProduct.smul_tmul' c _ _] }
+
 /-- Existence of the multilinear map M : (∀ i, V i ⊗ W i) →ₘ (⨂V) ⊗ (⨂W)
     satisfying M (fun i => v i ⊗ₜ w i) = tprod v ⊗ₜ tprod w. -/
 private theorem piTensorDistribMultilinear_exists {ι : Type*} [Fintype ι] [DecidableEq ι]
@@ -1136,85 +1224,18 @@ private theorem piTensorDistribMultilinear_exists {ι : Type*} [Fintype ι] [Dec
             (PiTensorProduct.reindex K V eSum).symm.map_smul]
         rfl
 
-      let innerBilin : (PiTensorProduct K V') →ₗ[K] (PiTensorProduct K W') →ₗ[K]
-          (V i₀ →ₗ[K] W i₀ →ₗ[K] (PiTensorProduct K V) ⊗[K] (PiTensorProduct K W)) :=
-        { toFun := fun tV' =>
-            { toFun := fun tW' =>
-                { toFun := fun v₀ =>
-                    { toFun := fun w₀ => combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ tW'
-                      map_add' := fun x y => by
-                        rw [combineW_add]
-                        erw [show combineV_fun v₀ tV' ⊗ₜ[K] (combineW_fun x tW' + combineW_fun y tW') =
-                            combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun x tW' +
-                            combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun y tW' from
-                          TensorProduct.tmul_add _ _ _]
-                      map_smul' := fun c x => by
-                        rw [combineW_smul]
-                        simp only [RingHom.id_apply]
-                        erw [show combineV_fun v₀ tV' ⊗ₜ[K] (c • combineW_fun x tW') =
-                            c • (combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun x tW') from
-                          TensorProduct.tmul_smul c _ _] }
-                  map_add' := fun x y => by
-                    ext w₀
-                    simp only [LinearMap.coe_mk, AddHom.coe_mk, LinearMap.add_apply]
-                    rw [combineV_add]
-                    erw [show (combineV_fun x tV' + combineV_fun y tV') ⊗ₜ[K] combineW_fun w₀ tW' =
-                        combineV_fun x tV' ⊗ₜ[K] combineW_fun w₀ tW' +
-                        combineV_fun y tV' ⊗ₜ[K] combineW_fun w₀ tW' from
-                      TensorProduct.add_tmul _ _ _]
-                  map_smul' := fun c x => by
-                    ext w₀
-                    simp only [LinearMap.coe_mk, AddHom.coe_mk, RingHom.id_apply, LinearMap.smul_apply]
-                    rw [combineV_smul]
-                    erw [show (c • combineV_fun x tV') ⊗ₜ[K] combineW_fun w₀ tW' =
-                        c • (combineV_fun x tV' ⊗ₜ[K] combineW_fun w₀ tW') from
-                      TensorProduct.smul_tmul' c _ _] }
-              map_add' := fun x y => by
-                ext v₀ w₀
-                simp only [LinearMap.coe_mk, AddHom.coe_mk, LinearMap.add_apply]
-                rw [combineW_add']
-                erw [show combineV_fun v₀ tV' ⊗ₜ[K] (combineW_fun w₀ x + combineW_fun w₀ y) =
-                    combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ x +
-                    combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ y from
-                  TensorProduct.tmul_add _ _ _]
-              map_smul' := fun c x => by
-                ext v₀ w₀
-                simp only [LinearMap.coe_mk, AddHom.coe_mk, LinearMap.smul_apply, RingHom.id_apply]
-                rw [combineW_smul']
-                erw [show combineV_fun v₀ tV' ⊗ₜ[K] (c • combineW_fun w₀ x) =
-                    c • (combineV_fun v₀ tV' ⊗ₜ[K] combineW_fun w₀ x) from
-                  TensorProduct.tmul_smul c _ _] }
-          map_add' := fun x y => by
-            apply PiTensorProduct.ext
-            ext tW' v₀ w₀
-            simp only [LinearMap.compMultilinearMap_apply, LinearMap.add_apply, LinearMap.coe_mk,
-              AddHom.coe_mk]
-            -- The goal structure needs dsimp to beta-reduce the nested lambdas
-            show combineV_fun v₀ (x + y) ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW') =
-              combineV_fun v₀ x ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW') +
-              combineV_fun v₀ y ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW')
-            rw [combineV_add']
-            erw [TensorProduct.add_tmul]
-          map_smul' := fun c x => by
-            apply PiTensorProduct.ext
-            ext tW' v₀ w₀
-            simp only [LinearMap.compMultilinearMap_apply, LinearMap.smul_apply, LinearMap.coe_mk,
-              AddHom.coe_mk, RingHom.id_apply]
-            show combineV_fun v₀ (c • x) ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW') =
-              c • (combineV_fun v₀ x ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW'))
-            rw [combineV_smul']
-            erw [show (c • combineV_fun v₀ x) ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW') =
-                c • (combineV_fun v₀ x ⊗ₜ[K] combineW_fun w₀ (PiTensorProduct.tprod K tW')) from
-              TensorProduct.smul_tmul' c _ _] }
+      let innerBilin := mkInnerBilin e V' W' combineV_fun combineW_fun
+          combineW_add combineW_smul combineV_add combineV_smul
+          combineW_add' combineW_smul' combineV_add' combineV_smul'
 
-      use {
-        toFun := fun f =>
-          let f_none : V i₀ ⊗[K] W i₀ := f i₀
-          let f_some : ∀ a : α, V' a ⊗[K] W' a := fun a => f (e.symm (some a))
-          let ih_result := M' f_some
-          let step1 := TensorProduct.lift innerBilin ih_result
-          TensorProduct.lift step1 f_none
-        map_update_add' := fun f i x y => by
+      have hM : ∃ M : MultilinearMap K (fun i => V i ⊗[K] W i)
+              ((PiTensorProduct K V) ⊗[K] (PiTensorProduct K W)),
+            ∀ v w, M (fun i => v i ⊗ₜ[K] w i) = tprod K v ⊗ₜ[K] tprod K w := by
+        refine ⟨⟨fun f => TensorProduct.lift
+              (TensorProduct.lift innerBilin (M' (fun a => f (e.symm (some a))))) (f i₀),
+            ?map_update_add', ?map_update_smul'⟩, ?spec⟩
+        case map_update_add' =>
+          intro _ f i x y
           simp only
           by_cases hi : i = i₀
           · subst hi
@@ -1259,7 +1280,8 @@ private theorem piTensorDistribMultilinear_exists {ι : Type*} [Fintype ι] [Dec
               change TensorProduct.uncurry _ _ _ _ (g₁ + g₂) = TensorProduct.uncurry _ _ _ _ g₁ + TensorProduct.uncurry _ _ _ _ g₂
               rw [map_add]
             rw [lift_add, LinearMap.add_apply]
-        map_update_smul' := fun f i c x => by
+        case map_update_smul' =>
+          intro _ f i c x
           simp only
           by_cases hi : i = i₀
           · subst hi
@@ -1301,38 +1323,39 @@ private theorem piTensorDistribMultilinear_exists {ι : Type*} [Fintype ι] [Dec
               change TensorProduct.uncurry _ _ _ _ (c • g) = c • TensorProduct.uncurry _ _ _ _ g
               rw [map_smul]
             rw [lift_smul, LinearMap.smul_apply]
-      }
-      intro v w
-      simp only [MultilinearMap.coe_mk]
-      let v' : ∀ a : α, V' a := fun a => v (e.symm (some a))
-      let w' : ∀ a : α, W' a := fun a => w (e.symm (some a))
-      have ih_eq : M' (fun a => v' a ⊗ₜ[K] w' a) = (PiTensorProduct.tprod K) v' ⊗ₜ[K] (PiTensorProduct.tprod K) w' := hM' v' w'
-      conv_lhs => simp only [TensorProduct.lift.tmul, LinearMap.coe_mk, AddHom.coe_mk, ih_eq]
-      rw [ih_eq, TensorProduct.lift.tmul, LinearMap.coe_mk, AddHom.coe_mk]
-      show combineV_fun (v i₀) ((PiTensorProduct.tprod K) v') ⊗ₜ[K] combineW_fun (w i₀) ((PiTensorProduct.tprod K) w') =
-           (PiTensorProduct.tprod K) v ⊗ₜ[K] (PiTensorProduct.tprod K) w
-      have hcombineV : combineV_fun (v i₀) ((PiTensorProduct.tprod K) v') = (PiTensorProduct.tprod K) v := by
-        simp only [combineV_fun, subsingleV, PiTensorProduct.subsingletonEquiv_symm_apply']
-        rw [show ((PiTensorProduct.tprod K) v' : PiTensorProduct K V') =
-            (PiTensorProduct.tprod K (fun a => v' a) : ⨂[K] (a : α), Vsum (Sum.inl a)) from rfl]
-        rw [show ((PiTensorProduct.tprod K) (fun _ : PUnit => v i₀) : ⨂[K] (_ : PUnit), V i₀) =
-            (PiTensorProduct.tprod K (fun _ : PUnit => v i₀) : ⨂[K] (u : PUnit), Vsum (Sum.inr u)) from rfl]
-        rw [PiTensorProduct.tmulEquivDep_apply, LinearEquiv.symm_apply_eq, PiTensorProduct.reindex_tprod]
-        congr 1; ext s
-        cases s with
-        | inl a => simp only [eSum, Equiv.symm_trans_apply, optSum, Equiv.optionEquivSumPUnit_symm_inl, v']
-        | inr u => simp only [eSum, Equiv.symm_trans_apply, optSum, Equiv.optionEquivSumPUnit_symm_inr, i₀]
-      have hcombineW : combineW_fun (w i₀) ((PiTensorProduct.tprod K) w') = (PiTensorProduct.tprod K) w := by
-        simp only [combineW_fun, subsingleW, PiTensorProduct.subsingletonEquiv_symm_apply']
-        rw [show ((PiTensorProduct.tprod K) w' : PiTensorProduct K W') =
-            (PiTensorProduct.tprod K (fun a => w' a) : ⨂[K] (a : α), Wsum (Sum.inl a)) from rfl]
-        rw [show ((PiTensorProduct.tprod K) (fun _ : PUnit => w i₀) : ⨂[K] (_ : PUnit), W i₀) =
-            (PiTensorProduct.tprod K (fun _ : PUnit => w i₀) : ⨂[K] (u : PUnit), Wsum (Sum.inr u)) from rfl]
-        rw [PiTensorProduct.tmulEquivDep_apply, LinearEquiv.symm_apply_eq, PiTensorProduct.reindex_tprod]
-        have heq : (fun (s : α ⊕ PUnit) => Sum.rec w' (fun _ => w i₀) s) =
-                   (fun (s : α ⊕ PUnit) => w (eSum.symm s)) := by funext s; cases s <;> rfl
-        congr 1
-      rw [hcombineV, hcombineW]
+        case spec =>
+          intro v w
+          simp only [MultilinearMap.coe_mk]
+          let v' : ∀ a : α, V' a := fun a => v (e.symm (some a))
+          let w' : ∀ a : α, W' a := fun a => w (e.symm (some a))
+          have ih_eq : M' (fun a => v' a ⊗ₜ[K] w' a) = (PiTensorProduct.tprod K) v' ⊗ₜ[K] (PiTensorProduct.tprod K) w' := hM' v' w'
+          conv_lhs => simp only [TensorProduct.lift.tmul, LinearMap.coe_mk, AddHom.coe_mk, ih_eq]
+          rw [ih_eq, TensorProduct.lift.tmul, LinearMap.coe_mk, AddHom.coe_mk]
+          show combineV_fun (v i₀) ((PiTensorProduct.tprod K) v') ⊗ₜ[K] combineW_fun (w i₀) ((PiTensorProduct.tprod K) w') =
+               (PiTensorProduct.tprod K) v ⊗ₜ[K] (PiTensorProduct.tprod K) w
+          have hcombineV : combineV_fun (v i₀) ((PiTensorProduct.tprod K) v') = (PiTensorProduct.tprod K) v := by
+            simp only [combineV_fun, subsingleV, PiTensorProduct.subsingletonEquiv_symm_apply']
+            rw [show ((PiTensorProduct.tprod K) v' : PiTensorProduct K V') =
+                (PiTensorProduct.tprod K (fun a => v' a) : ⨂[K] (a : α), Vsum (Sum.inl a)) from rfl]
+            rw [show ((PiTensorProduct.tprod K) (fun _ : PUnit => v i₀) : ⨂[K] (_ : PUnit), V i₀) =
+                (PiTensorProduct.tprod K (fun _ : PUnit => v i₀) : ⨂[K] (u : PUnit), Vsum (Sum.inr u)) from rfl]
+            rw [PiTensorProduct.tmulEquivDep_apply, LinearEquiv.symm_apply_eq, PiTensorProduct.reindex_tprod]
+            congr 1; ext s
+            cases s with
+            | inl a => simp only [eSum, Equiv.symm_trans_apply, optSum, Equiv.optionEquivSumPUnit_symm_inl, v']
+            | inr u => simp only [eSum, Equiv.symm_trans_apply, optSum, Equiv.optionEquivSumPUnit_symm_inr, i₀]
+          have hcombineW : combineW_fun (w i₀) ((PiTensorProduct.tprod K) w') = (PiTensorProduct.tprod K) w := by
+            simp only [combineW_fun, subsingleW, PiTensorProduct.subsingletonEquiv_symm_apply']
+            rw [show ((PiTensorProduct.tprod K) w' : PiTensorProduct K W') =
+                (PiTensorProduct.tprod K (fun a => w' a) : ⨂[K] (a : α), Wsum (Sum.inl a)) from rfl]
+            rw [show ((PiTensorProduct.tprod K) (fun _ : PUnit => w i₀) : ⨂[K] (_ : PUnit), W i₀) =
+                (PiTensorProduct.tprod K (fun _ : PUnit => w i₀) : ⨂[K] (u : PUnit), Wsum (Sum.inr u)) from rfl]
+            rw [PiTensorProduct.tmulEquivDep_apply, LinearEquiv.symm_apply_eq, PiTensorProduct.reindex_tprod]
+            have heq : (fun (s : α ⊕ PUnit) => Sum.rec w' (fun _ => w i₀) s) =
+                       (fun (s : α ⊕ PUnit) => w (eSum.symm s)) := by funext s; cases s <;> rfl
+            congr 1
+          rw [hcombineV, hcombineW]
+      exact hM
 
 /-- The multilinear map M : (∀ i, V i ⊗ W i) →ₘ (⨂V) ⊗ (⨂W) that is the left inverse
     of the interchange map. Satisfies M (fun i => v i ⊗ₜ w i) = tprod v ⊗ₜ tprod w.
