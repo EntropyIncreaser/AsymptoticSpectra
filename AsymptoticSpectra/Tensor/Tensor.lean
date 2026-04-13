@@ -158,6 +158,14 @@ theorem liftMap_comp {ι : Type*} [Fintype ι] {V₁ V₂ V₃ : ι → Type*}
     simp [liftMap]
   rw [← LinearMap.comp_apply, this]
 
+/-- liftMap on a pure tensor is a pure tensor with each component mapped. -/
+theorem liftMap_tprod {ι : Type*} [Fintype ι] {V W : ι → Type*}
+    [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
+    [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
+    (f : ∀ i, V i →ₗ[K] W i) (v : ∀ i, V i) :
+    liftMap f (tprod K v) = tprod K (fun i => f i (v i)) := by
+  simp only [liftMap, PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply]
+
 /-- Helper to construct interchange map definition -/
 def interchangeAux {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
@@ -330,6 +338,18 @@ theorem liftMap_interchange {ι : Type*} [Fintype ι] [DecidableEq ι]
   | add x y ih1 ih2 =>
     simp only [map_add, LinearMap.add_apply, ih1, ih2]
 
+/-- interchange on pure tensors gives a pure tensor of tensor products. -/
+theorem interchange_tprod_K {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι → Type*}
+    [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
+    [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
+    (v : ∀ i, V i) (w : ∀ i, W i) :
+    interchange (tprod K v) (tprod K w) = tprod K (fun i => v i ⊗ₜ[K] w i) := by
+  dsimp [interchange]
+  rw [PiTensorProduct.lift.tprod]
+  dsimp [interchangeMap]
+  rw [PiTensorProduct.lift.tprod]
+  rfl
+
 /-- Direct sum of two tensor objects. -/
 def add (X Y : TensorObj K d) : TensorObj K d where
   V := fun i => X.V i × Y.V i
@@ -351,6 +371,24 @@ instance : Mul (TensorObj K d) := ⟨mul⟩
 @[simp] theorem mul_t (X Y : TensorObj K d) : (X * Y).t = interchange X.t Y.t := rfl
 
 end
+
+end TensorObj
+
+namespace TensorObj
+
+variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
+
+/-- X is a restriction of Y (X ≤ Y) if there exists a family of linear maps f_i : Y.V_i → X.V_i
+    such that the induced map on the tensor product sends Y.t to X.t. -/
+def Restrict (X Y : TensorObj K d) : Prop :=
+  ∃ f : ∀ i, Y.V i →ₗ[K] X.V i, liftMap f Y.t = X.t
+
+theorem restrict_refl (X : TensorObj K d) : Restrict X X :=
+  ⟨fun _ => LinearMap.id, liftMap_id X⟩
+
+theorem restrict_trans {X Y Z : TensorObj K d} : Restrict X Y → Restrict Y Z → Restrict X Z := by
+  rintro ⟨f, hf⟩ ⟨g, hg⟩
+  exact ⟨fun i => (f i).comp (g i), by rw [← liftMap_comp, hg, hf]⟩
 
 end TensorObj
 
@@ -402,141 +440,332 @@ private theorem isomorphic_trans {X Y Z : TensorObj K d} : Isomorphic X Y → Is
   simp only [LinearEquiv.coe_trans]
   rw [← liftMap_comp, iXY.map_t, iYZ.map_t]
 
-/-- The setoid structure on `TensorObj` defined by isomorphism. -/
+/-- The setoid structure on `TensorObj` defined by mutual restriction (X ~ Y iff X ≤ Y and Y ≤ X). -/
 def tensorSetoid (K : Type u) [Field K] (d : ℕ) [Fact (1 < d)] : Setoid (TensorObj.{u, max u v} K d) where
-  r := Isomorphic
+  r X Y := TensorObj.Restrict X Y ∧ TensorObj.Restrict Y X
   iseqv := {
-    refl := isomorphic_refl
-    symm := isomorphic_symm
-    trans := isomorphic_trans
+    refl  := fun X => ⟨restrict_refl X, restrict_refl X⟩
+    symm  := fun ⟨h1, h2⟩ => ⟨h2, h1⟩
+    trans := fun ⟨h1, h2⟩ ⟨h3, h4⟩ => ⟨restrict_trans h1 h3, restrict_trans h4 h2⟩
   }
 
-/-- Addition respects isomorphism. -/
-theorem add_isomorphic {X Y Z W : TensorObj K d} (h1 : Isomorphic X Y) (h2 : Isomorphic Z W) :
-    Isomorphic (X + Z) (Y + W) := by
-  obtain ⟨e⟩ := h1
-  obtain ⟨f⟩ := h2
-  let equiv := fun i => prodEquiv (e.equiv i) (f.equiv i)
-  refine ⟨{
-    equiv := equiv
-    map_t := ?_
-  }⟩
-  -- Force unfolding of addition instance and definition
-  change liftMap (fun i => (equiv i).toLinearMap) (TensorObj.add X Z).t = (TensorObj.add Y W).t
-  dsimp [TensorObj.add]
-  rw [map_add]
-  congr 1
-  · -- Left component
-    rw [← e.map_t]
-    induction X.t using PiTensorProduct.induction_on with
-    | smul_tprod c v =>
-      simp only [map_smul, liftMap, PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply]
-      refine congr_arg (c • ·) ?_
-      apply congr_arg (f := tprod K)
-      funext i
-      simp [equiv, prodEquiv, Prod.map_apply]
-    | add x y ih1 ih2 =>
-      simp only [map_add, ih1, ih2]
-  · -- Right component
-    rw [← f.map_t]
-    induction Z.t using PiTensorProduct.induction_on with
-    | smul_tprod c v =>
-      simp only [map_smul, liftMap, PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply]
-      refine congr_arg (c • ·) ?_
-      apply congr_arg (f := tprod K)
-      funext i
-      simp [equiv, prodEquiv, Prod.map_apply]
-    | add x y ih1 ih2 =>
-      simp only [map_add, ih1, ih2]
+/-- Addition respects mutual restriction. -/
+theorem add_isomorphic {X Y Z W : TensorObj K d}
+    (h1 : Restrict X Y ∧ Restrict Y X) (h2 : Restrict Z W ∧ Restrict W Z) :
+    Restrict (X + Z) (Y + W) ∧ Restrict (Y + W) (X + Z) := by
+  obtain ⟨⟨f, hf⟩, ⟨f', hf'⟩⟩ := h1
+  obtain ⟨⟨g, hg⟩, ⟨g', hg'⟩⟩ := h2
+  constructor
+  · refine ⟨fun i => LinearMap.prodMap (f i) (g i), ?_⟩
+    simp only [add_t]
+    have h1 : (fun i => LinearMap.prodMap (f i) (g i) ∘ₗ LinearMap.inl K (Y.V i) (W.V i)) =
+              (fun i => LinearMap.inl K (X.V i) (Z.V i) ∘ₗ f i) := by
+      funext i; ext x <;> simp [LinearMap.prodMap]
+    have h2 : (fun i => LinearMap.prodMap (f i) (g i) ∘ₗ LinearMap.inr K (Y.V i) (W.V i)) =
+              (fun i => LinearMap.inr K (X.V i) (Z.V i) ∘ₗ g i) := by
+      funext i; ext x <;> simp [LinearMap.prodMap]
+    have key : (liftMap (fun i => (f i).prodMap (g i)))
+        ((liftMap (fun i => LinearMap.inl K (Y.V i) (W.V i))) Y.t +
+         (liftMap (fun i => LinearMap.inr K (Y.V i) (W.V i))) W.t) =
+        (liftMap (fun i => LinearMap.inl K (X.V i) (Z.V i))) X.t +
+        (liftMap (fun i => LinearMap.inr K (X.V i) (Z.V i))) Z.t := by
+      rw [(liftMap _).map_add, liftMap_comp, liftMap_comp, h1, h2, ← liftMap_comp, ← liftMap_comp, hf, hg]
+    exact key
+  · refine ⟨fun i => LinearMap.prodMap (f' i) (g' i), ?_⟩
+    simp only [add_t]
+    have h1 : (fun i => LinearMap.prodMap (f' i) (g' i) ∘ₗ LinearMap.inl K (X.V i) (Z.V i)) =
+              (fun i => LinearMap.inl K (Y.V i) (W.V i) ∘ₗ f' i) := by
+      funext i; ext x <;> simp [LinearMap.prodMap]
+    have h2 : (fun i => LinearMap.prodMap (f' i) (g' i) ∘ₗ LinearMap.inr K (X.V i) (Z.V i)) =
+              (fun i => LinearMap.inr K (Y.V i) (W.V i) ∘ₗ g' i) := by
+      funext i; ext x <;> simp [LinearMap.prodMap]
+    have key : (liftMap (fun i => (f' i).prodMap (g' i)))
+        ((liftMap (fun i => LinearMap.inl K (X.V i) (Z.V i))) X.t +
+         (liftMap (fun i => LinearMap.inr K (X.V i) (Z.V i))) Z.t) =
+        (liftMap (fun i => LinearMap.inl K (Y.V i) (W.V i))) Y.t +
+        (liftMap (fun i => LinearMap.inr K (Y.V i) (W.V i))) W.t := by
+      rw [(liftMap _).map_add, liftMap_comp, liftMap_comp, h1, h2, ← liftMap_comp, ← liftMap_comp, hf', hg']
+    exact key
 
-theorem add_comm_isomorphic {X Y : TensorObj K d} : Isomorphic (X + Y) (Y + X) := by
-  refine ⟨{ equiv := fun i => prodComm, map_t := ?_ }⟩
-  -- Use change to expand TensorObj.add terms
-  change liftMap (fun i => (prodComm).toLinearMap)
-    (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) X.t +
-     liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) Y.t) =
-    (liftMap (fun i => LinearMap.inl K (Y.V i) (X.V i)) Y.t +
-     liftMap (fun i => LinearMap.inr K (Y.V i) (X.V i)) X.t)
-  rw [map_add]
-  conv_rhs => rw [add_comm]
-  congr 1
-  · -- Left: prodComm . inl = inr
-    induction X.t using PiTensorProduct.induction_on with
+/-- Helper: liftMap with a linear equiv applied to a sum of inl/inr. -/
+private theorem add_comm_restrict (X Y : TensorObj K d) :
+    Restrict (X + Y) (Y + X) :=
+  ⟨fun i => (prodComm : (Y.V i × X.V i) ≃ₗ[K] (X.V i × Y.V i)).toLinearMap, by
+    simp only [add_t]
+    have h1 : (fun i => (prodComm : (Y.V i × X.V i) ≃ₗ[K] _).toLinearMap ∘ₗ LinearMap.inl K (Y.V i) (X.V i)) =
+              fun i => LinearMap.inr K (X.V i) (Y.V i) := by
+      funext i; ext x <;> simp [prodComm]
+    have h2 : (fun i => (prodComm : (Y.V i × X.V i) ≃ₗ[K] _).toLinearMap ∘ₗ LinearMap.inr K (Y.V i) (X.V i)) =
+              fun i => LinearMap.inl K (X.V i) (Y.V i) := by
+      funext i; ext x <;> simp [prodComm]
+    erw [(liftMap _).map_add, liftMap_comp, liftMap_comp, h1, h2]
+    exact add_comm _ _⟩
+
+theorem add_comm_isomorphic {X Y : TensorObj K d} :
+    Restrict (X + Y) (Y + X) ∧ Restrict (Y + X) (X + Y) :=
+  ⟨add_comm_restrict X Y, add_comm_restrict Y X⟩
+
+private theorem add_assoc_restrict_aux (X Y Z : TensorObj K d)
+    (x : PiTensorProduct K X.V) (y : PiTensorProduct K Y.V) (z : PiTensorProduct K Z.V) :
+    (liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap))
+      (liftMap (fun i => LinearMap.inl K (X.V i) ((Y + Z).V i)) x +
+       liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+         (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y +
+          liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z)) =
+    liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+      (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x +
+       liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y) +
+    liftMap (fun i => LinearMap.inr K ((X + Y).V i) (Z.V i)) z := by
+  -- Direct induction: hA/hB/hC without liftMap_comp.
+  -- hA: prodAssoc.symm (inl_X_YZ x) = inl_XY_Z (inl_X_Y x)
+  -- hB: prodAssoc.symm (inr_X_YZ (inl_Y_Z y)) = inl_XY_Z (inr_X_Y y)
+  -- hC: prodAssoc.symm (inr_X_YZ (inr_Y_Z z)) = inr_XY_Z z
+  have hA : ∀ t : PiTensorProduct K X.V,
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+        (liftMap (fun i => LinearMap.inl K (X.V i) ((Y + Z).V i)) t) =
+      liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) t) := by
+    suffices h : ∀ t : PiTensorProduct K X.V,
+        liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+          (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i × Z.V i)) t) =
+        liftMap (fun i => LinearMap.inl K (X.V i × Y.V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) t) from h
+    intro t; induction t using PiTensorProduct.induction_on with
     | smul_tprod c v =>
-      simp [map_smul, liftMap, PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply, prodComm, Prod.swap]
-    | add x y ih1 ih2 =>
-      simp [map_add, ih1, ih2]
-  · -- Right: prodComm . inr = inl
-    induction Y.t using PiTensorProduct.induction_on with
+        simp only [liftMap, PiTensorProduct.lift.tprod, LinearEquiv.prodAssoc, map_smul]; rfl
+    | add t1 t2 ih1 ih2 => simp only [map_add, ih1, ih2]
+  have hB : ∀ t : PiTensorProduct K Y.V,
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+        (liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+          (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) t)) =
+      liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) t) := by
+    suffices h : ∀ t : PiTensorProduct K Y.V,
+        liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+          (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i × Z.V i))
+            (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) t)) =
+        liftMap (fun i => LinearMap.inl K (X.V i × Y.V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) t) from h
+    intro t; induction t using PiTensorProduct.induction_on with
     | smul_tprod c v =>
-      simp [map_smul, liftMap, PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply, prodComm, Prod.swap]
-    | add x y ih1 ih2 =>
-      simp [map_add, ih1, ih2]
+        simp [liftMap, PiTensorProduct.lift.tprod, LinearEquiv.prodAssoc, map_smul,
+              MultilinearMap.compLinearMap_apply, LinearMap.inl_apply, LinearMap.inr_apply]
+    | add t1 t2 ih1 ih2 => simp only [map_add, ih1, ih2]
+  have hC : ∀ t : PiTensorProduct K Z.V,
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+        (liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+          (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) t)) =
+      liftMap (fun i => LinearMap.inr K ((X + Y).V i) (Z.V i)) t := by
+    suffices h : ∀ t : PiTensorProduct K Z.V,
+        liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+          (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i × Z.V i))
+            (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) t)) =
+        liftMap (fun i => LinearMap.inr K (X.V i × Y.V i) (Z.V i)) t from h
+    intro t; induction t using PiTensorProduct.induction_on with
+    | smul_tprod c v =>
+        simp [liftMap, PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply,
+              LinearMap.inr_apply, LinearEquiv.prodAssoc]; norm_cast
+    | add t1 t2 ih1 ih2 => simp only [map_add, ih1, ih2]
+  -- apply hA/hB/hC by linearity
+  have step1 : (liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap))
+      (liftMap (fun i => LinearMap.inl K (X.V i) ((Y + Z).V i)) x +
+       liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+         (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y +
+          liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z)) =
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+        (liftMap (fun i => LinearMap.inl K (X.V i) ((Y + Z).V i)) x) +
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+        (liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+          (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y +
+           liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z)) :=
+    (liftMap _).map_add _ _
+  have step2 : liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+      (liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+        (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y +
+         liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z)) =
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+        (liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+          (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y)) +
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+        (liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+          (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z)) := by
+    have hmid : liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+        (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y +
+         liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z) =
+        liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+          (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y) +
+        liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+          (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z) :=
+      (liftMap _).map_add _ _
+    rw [hmid]
+    exact (liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)).map_add _ _
+  have step3 : liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+      (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x +
+       liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y) =
+      liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x) +
+      liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y) :=
+    (liftMap _).map_add _ _
+  rw [step1, step2, hA, hB, hC, step3]
+  abel
 
-theorem add_assoc_isomorphic {X Y Z : TensorObj K d} : Isomorphic (X + Y + Z) (X + (Y + Z)) := by
-  refine ⟨{ equiv := fun i => prodAssoc, map_t := ?_ }⟩
-  simp only [TensorObj.add_t]
-  erw [(liftMap (fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)).map_add,
-       (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))).map_add,
-       (liftMap (fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)).map_add,
-       (liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))).map_add]
-  have hA : (liftMap fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)
-      ((liftMap fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
-        ((liftMap fun i => LinearMap.inl K (X.V i) (Y.V i)) X.t)) =
-      (liftMap fun i => LinearMap.inl K (X.V i) ((Y + Z).V i)) X.t := by
-    erw [liftMap_comp, liftMap_comp]; congr 1
-  have hB : (liftMap fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)
-      ((liftMap fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
-        ((liftMap fun i => LinearMap.inr K (X.V i) (Y.V i)) Y.t)) =
-      (liftMap fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
-        ((liftMap fun i => LinearMap.inl K (Y.V i) (Z.V i)) Y.t) := by
-    erw [liftMap_comp, liftMap_comp, liftMap_comp]; congr 1
-  have hC : (liftMap fun i => (prodAssoc : (X + Y + Z).V i ≃ₗ[K] (X + (Y + Z)).V i).toLinearMap)
-      ((liftMap fun i => LinearMap.inr K ((X + Y).V i) (Z.V i)) Z.t) =
-      (liftMap fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
-        ((liftMap fun i => LinearMap.inr K (Y.V i) (Z.V i)) Z.t) := by
-    erw [liftMap_comp, liftMap_comp]; congr 1
-  rw [hA, hB, hC]; abel
+private theorem add_assoc_restrict (X Y Z : TensorObj K d) :
+    Restrict (X + Y + Z) (X + (Y + Z)) :=
+  ⟨fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap, by
+    simp only [add_t]
+    exact add_assoc_restrict_aux X Y Z X.t Y.t Z.t⟩
 
-theorem mul_isomorphic {X Y Z W : TensorObj K d} (h1 : Isomorphic X Y) (h2 : Isomorphic Z W) :
-    Isomorphic (X * Z) (Y * W) := by
-  obtain ⟨f⟩ := h1
-  obtain ⟨g⟩ := h2
-  let e := fun i => TensorProduct.congr (f.equiv i) (g.equiv i)
-  refine ⟨{
-    equiv := e
-    map_t := ?_
-  }⟩
-  change liftMap (fun i => (e i).toLinearMap) (interchange X.t Z.t) = interchange Y.t W.t
-  have h_map : ∀ i, (e i).toLinearMap = TensorProduct.map (f.equiv i).toLinearMap (g.equiv i).toLinearMap := by
-    intro i
-    apply TensorProduct.ext
-    ext u v
-    simp [e, TensorProduct.map_tmul]
-  simp_rw [h_map]
-  rw [liftMap_interchange, f.map_t, g.map_t]
+-- Auxiliary: liftMap prodAssoc on add_t = add_t rearranged (symmetric to add_assoc_restrict_aux)
+private theorem add_assoc_bwd_aux (X Y Z : TensorObj K d)
+    (x : PiTensorProduct K X.V) (y : PiTensorProduct K Y.V) (z : PiTensorProduct K Z.V) :
+    (liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap))
+      (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x +
+         liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y) +
+       liftMap (fun i => LinearMap.inr K ((X + Y).V i) (Z.V i)) z) =
+    liftMap (fun i => LinearMap.inl K (X.V i) ((Y + Z).V i)) x +
+    liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+      (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y +
+       liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z) := by
+  -- Direct induction: hA'/hB'/hC' without liftMap_comp.
+  have hA' : ∀ t : PiTensorProduct K X.V,
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+        (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) t)) =
+      liftMap (fun i => LinearMap.inl K (X.V i) ((Y + Z).V i)) t := by
+    suffices h : ∀ t : PiTensorProduct K X.V,
+        liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+          (liftMap (fun i => LinearMap.inl K (X.V i × Y.V i) (Z.V i))
+            (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) t)) =
+        liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i × Z.V i)) t from h
+    intro t; induction t using PiTensorProduct.induction_on with
+    | smul_tprod c v =>
+        simp only [liftMap, PiTensorProduct.lift.tprod, LinearEquiv.prodAssoc, map_smul,
+                   MultilinearMap.compLinearMap_apply, LinearMap.inl_apply]; rfl
+    | add t1 t2 ih1 ih2 => simp only [map_add, ih1, ih2]
+  have hB' : ∀ t : PiTensorProduct K Y.V,
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+        (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) t)) =
+      liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+        (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) t) := by
+    suffices h : ∀ t : PiTensorProduct K Y.V,
+        liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+          (liftMap (fun i => LinearMap.inl K (X.V i × Y.V i) (Z.V i))
+            (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) t)) =
+        liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i × Z.V i))
+          (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) t) from h
+    intro t; induction t using PiTensorProduct.induction_on with
+    | smul_tprod c v =>
+        simp [liftMap, PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply,
+              LinearMap.inl_apply, LinearMap.inr_apply, LinearEquiv.prodAssoc]
+    | add t1 t2 ih1 ih2 => simp only [map_add, ih1, ih2]
+  have hC' : ∀ t : PiTensorProduct K Z.V,
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+        (liftMap (fun i => LinearMap.inr K ((X + Y).V i) (Z.V i)) t) =
+      liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+        (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) t) := by
+    suffices h : ∀ t : PiTensorProduct K Z.V,
+        liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+          (liftMap (fun i => LinearMap.inr K (X.V i × Y.V i) (Z.V i)) t) =
+        liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i × Z.V i))
+          (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) t) from h
+    intro t; induction t using PiTensorProduct.induction_on with
+    | smul_tprod c v =>
+        simp only [liftMap, PiTensorProduct.lift.tprod, LinearEquiv.prodAssoc, map_smul,
+                   LinearMap.inr_apply]; rfl
+    | add t1 t2 ih1 ih2 => simp only [map_add, ih1, ih2]
+  have step1' : (liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap))
+      (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x +
+         liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y) +
+       liftMap (fun i => LinearMap.inr K ((X + Y).V i) (Z.V i)) z) =
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+        (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x +
+           liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y)) +
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+        (liftMap (fun i => LinearMap.inr K ((X + Y).V i) (Z.V i)) z) :=
+    (liftMap _).map_add _ _
+  have step2' : liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+      (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x +
+         liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y)) =
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+        (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x)) +
+      liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+        (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y)) := by
+    have hmid' : liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+        (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x +
+         liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y) =
+        liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inl K (X.V i) (Y.V i)) x) +
+        liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))
+          (liftMap (fun i => LinearMap.inr K (X.V i) (Y.V i)) y) :=
+      (liftMap _).map_add _ _
+    rw [hmid']
+    exact (liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)).map_add _ _
+  have step3' : liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+      (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y +
+       liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z) =
+      liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+        (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) y) +
+      liftMap (fun i => LinearMap.inr K (X.V i) ((Y + Z).V i))
+        (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) z) :=
+    (liftMap _).map_add _ _
+  rw [step1', step2', hA', hB', hC', step3']
+  abel
 
-theorem mul_comm_isomorphic {X Y : TensorObj K d} : Isomorphic (X * Y) (Y * X) := by
-  refine ⟨{ equiv := fun i => TensorProduct.comm K (X.V i) (Y.V i), map_t := ?_ }⟩
-  change liftMap (fun i ↦ (TensorProduct.comm K (X.V i) (Y.V i)).toLinearMap) (interchange X.t Y.t) = interchange Y.t X.t
-  induction X.t using PiTensorProduct.induction_on with
+theorem add_assoc_isomorphic {X Y Z : TensorObj K d} :
+    Restrict (X + Y + Z) (X + (Y + Z)) ∧ Restrict (X + (Y + Z)) (X + Y + Z) :=
+  ⟨add_assoc_restrict X Y Z,
+   ⟨fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap, by
+    simp only [add_t]
+    exact add_assoc_bwd_aux X Y Z X.t Y.t Z.t⟩⟩
+
+/-- Multiplication respects mutual restriction. -/
+theorem mul_isomorphic {X Y Z W : TensorObj K d}
+    (h1 : Restrict X Y ∧ Restrict Y X) (h2 : Restrict Z W ∧ Restrict W Z) :
+    Restrict (X * Z) (Y * W) ∧ Restrict (Y * W) (X * Z) := by
+  obtain ⟨⟨f, hf⟩, ⟨f', hf'⟩⟩ := h1
+  obtain ⟨⟨g, hg⟩, ⟨g', hg'⟩⟩ := h2
+  constructor
+  · exact ⟨fun i => TensorProduct.map (f i) (g i), by
+      simp only [mul_t]
+      erw [liftMap_interchange, hf, hg]⟩
+  · exact ⟨fun i => TensorProduct.map (f' i) (g' i), by
+      simp only [mul_t]
+      erw [liftMap_interchange, hf', hg']⟩
+
+private theorem mul_comm_restrict_aux (X Y : TensorObj K d)
+    (x : PiTensorProduct K X.V) (y : PiTensorProduct K Y.V) :
+    (liftMap (fun i => (TensorProduct.comm K (Y.V i) (X.V i)).toLinearMap)) (interchange y x) =
+    interchange x y := by
+  induction x using PiTensorProduct.induction_on with
   | smul_tprod c v =>
-    simp only [interchange, liftMap, map_smul]
-    induction Y.t using PiTensorProduct.induction_on with
+    simp only [map_smul]
+    induction y using PiTensorProduct.induction_on with
     | smul_tprod c' v' =>
       dsimp only [interchange, interchangeMap, liftMap, interchangeAux]
       simp only [map_smul, LinearMap.smul_apply, smul_smul]
       simp only [PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply, MultilinearMap.coe_mk]
-      rw [mul_comm c c']
-      congr 1
+      rw [mul_comm c c']; congr 1
     | add y1 y2 ih1 ih2 =>
-      dsimp only [interchange, liftMap] at ih1 ih2 ⊢
-      simp only [map_add, LinearMap.add_apply, smul_add]
-      erw [ih1, ih2]
+      simp only [map_add, LinearMap.add_apply, smul_add, ih1, ih2]
   | add x1 x2 ih1 ih2 =>
-    dsimp only [interchange, liftMap] at ih1 ih2 ⊢
-    simp only [map_add, LinearMap.add_apply]
-    erw [ih1, ih2]
+    simp only [LinearMap.add_apply, map_add, ih1, ih2]
+
+private theorem mul_comm_restrict (X Y : TensorObj K d) : Restrict (X * Y) (Y * X) :=
+  ⟨fun i => (TensorProduct.comm K (Y.V i) (X.V i)).toLinearMap, by
+    simp only [mul_t]
+    exact mul_comm_restrict_aux X Y X.t Y.t⟩
+
+theorem mul_comm_isomorphic {X Y : TensorObj K d} :
+    Restrict (X * Y) (Y * X) ∧ Restrict (Y * X) (X * Y) :=
+  ⟨mul_comm_restrict X Y, mul_comm_restrict Y X⟩
 
 /-- Associativity of the interchange map. -/
 @[simp]
@@ -569,117 +798,233 @@ theorem interchange_assoc {ι : Type*} [Fintype ι] [DecidableEq ι]
   | add x y ih1 ih2 =>
     simp only [map_add, LinearMap.add_apply, ih1, ih2]
 
-theorem mul_assoc_isomorphic {X Y Z : TensorObj K d} : Isomorphic (X * Y * Z) (X * (Y * Z)) := by
-  refine ⟨{
-    equiv := fun i => TensorProduct.assoc K (X.V i) (Y.V i) (Z.V i)
-    map_t := by
-      -- Unfold multiplication definitions at the element level
-      change liftMap (fun i => (TensorProduct.assoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
-        (interchange (interchange X.t Y.t) Z.t) = interchange X.t (interchange Y.t Z.t)
-      rw [interchange_assoc]
-  }⟩
+-- Restrict (X*Y*Z) (X*(Y*Z)): f : (X*(Y*Z)).V i →ₗ (X*Y*Z).V i = assoc.symm
+private theorem mul_assoc_restrict_fwd (X Y Z : TensorObj K d) : Restrict (X * Y * Z) (X * (Y * Z)) :=
+  ⟨fun i => (TensorProduct.assoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap, by
+    change liftMap (fun i => (TensorProduct.assoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap)
+      (interchange X.t (interchange Y.t Z.t)) = interchange (interchange X.t Y.t) Z.t
+    rw [← interchange_assoc, liftMap_comp]
+    have : (fun i => (TensorProduct.assoc K (X.V i) (Y.V i) (Z.V i)).symm.toLinearMap ∘ₗ
+            (TensorProduct.assoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap) =
+           fun _ => LinearMap.id := by
+      funext i; apply LinearMap.ext; intro v; simp
+    rw [this]; exact liftMap_id (X * Y * Z)⟩
 
-theorem add_zero_isomorphic {X : TensorObj K d} : Isomorphic (X + zeroObj) X := by
-  refine ⟨{ equiv := fun i => (prodComm).trans prodZero, map_t := ?_ }⟩
-  -- (X + 0).t = liftMap inl X.t + liftMap inr 0
-  -- 0 in TensorObj.zeroObj is 0
-  change liftMap _ (liftMap (fun i => LinearMap.inl K (X.V i) (TensorObj.zeroObj.V i)) X.t + 0) = _
-  erw [(liftMap _).map_add, (liftMap _).map_zero, add_zero]
-  erw [liftMap_comp]
-  convert liftMap_id X using 2
+-- Restrict (X*(Y*Z)) (X*Y*Z): f : (X*Y*Z).V i →ₗ (X*(Y*Z)).V i = assoc
+theorem mul_assoc_isomorphic {X Y Z : TensorObj K d} :
+    Restrict (X * Y * Z) (X * (Y * Z)) ∧ Restrict (X * (Y * Z)) (X * Y * Z) :=
+  ⟨mul_assoc_restrict_fwd X Y Z,
+   ⟨fun i => (TensorProduct.assoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap, by
+    change liftMap (fun i => (TensorProduct.assoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap)
+      (interchange (interchange X.t Y.t) Z.t) = interchange X.t (interchange Y.t Z.t)
+    rw [interchange_assoc]⟩⟩
 
+-- Restrict (X + zeroObj) X: embed X into X+zeroObj via inl
+-- f : X.V i →ₗ (X+zeroObj).V i, need liftMap inl X.t = (X+zeroObj).t
+private theorem add_zero_restrict_fwd (X : TensorObj K d) : Restrict (X + zeroObj) X :=
+  ⟨fun i => LinearMap.inl K (X.V i) PUnit, by
+    simp only [add_t, zeroObj, map_zero, add_zero]; rfl⟩
 
-theorem zero_add_isomorphic {X : TensorObj K d} : Isomorphic (zeroObj + X) X := by
-  refine ⟨{ equiv := fun i => prodZero, map_t := ?_ }⟩
-  change liftMap _ (0 + liftMap (fun i => LinearMap.inr K (TensorObj.zeroObj.V i) (X.V i)) X.t) = _
-  erw [(liftMap _).map_add, (liftMap _).map_zero, zero_add]
-  erw [liftMap_comp]
-  convert liftMap_id X using 2
+-- Restrict X (X + zeroObj): project X+zeroObj to X via fst
+-- f : (X+zeroObj).V i →ₗ X.V i, need liftMap fst (X+zeroObj).t = X.t
+theorem add_zero_isomorphic {X : TensorObj K d} :
+    Restrict (X + zeroObj) X ∧ Restrict X (X + zeroObj) :=
+  ⟨add_zero_restrict_fwd X,
+   ⟨fun i => LinearMap.fst K (X.V i) PUnit, by
+    have : liftMap (fun i => LinearMap.fst K (X.V i) PUnit) ((X + zeroObj).t) = X.t := by
+      simp only [add_t, zeroObj, map_zero, add_zero]
+      have heq : (fun i => (LinearMap.fst K (X.V i) PUnit).comp (LinearMap.inl K (X.V i) PUnit)) =
+                 fun _ => LinearMap.id := by funext i; ext; rfl
+      rw [liftMap_comp, heq, liftMap_id]
+    exact this⟩⟩
 
+-- Restrict (zeroObj + X) X: embed X into zeroObj+X via inr
+-- f : X.V i →ₗ (zeroObj+X).V i, need liftMap inr X.t = (zeroObj+X).t
+private theorem zero_add_restrict_fwd (X : TensorObj K d) : Restrict (zeroObj + X) X :=
+  ⟨fun i => LinearMap.inr K PUnit (X.V i), by
+    simp only [add_t, zeroObj, map_zero, zero_add]; rfl⟩
 
-theorem one_mul_isomorphic {X : TensorObj K d} : Isomorphic (oneObj * X) X := by
-  refine ⟨{ equiv := fun i => tensorOne, map_t := ?_ }⟩
-  change liftMap (fun i => tensorOne.toLinearMap) (interchange oneObj.t X.t) = X.t
+-- Restrict X (zeroObj + X): project via snd
+-- f : (zeroObj+X).V i →ₗ X.V i, need liftMap snd (zeroObj+X).t = X.t
+theorem zero_add_isomorphic {X : TensorObj K d} :
+    Restrict (zeroObj + X) X ∧ Restrict X (zeroObj + X) :=
+  ⟨zero_add_restrict_fwd X,
+   ⟨fun i => LinearMap.snd K PUnit (X.V i), by
+    have : liftMap (fun i => LinearMap.snd K PUnit (X.V i)) ((zeroObj + X).t) = X.t := by
+      simp only [add_t, zeroObj, map_zero, zero_add]
+      have heq : (fun i => (LinearMap.snd K PUnit (X.V i)).comp (LinearMap.inr K PUnit (X.V i))) =
+                 fun _ => LinearMap.id := by funext i; ext; rfl
+      rw [liftMap_comp, heq, liftMap_id]
+    exact this⟩⟩
+
+-- one_mul: oneObj * X ~ X
+-- Restrict (oneObj * X) X: f : X.V i →ₗ (oneObj*X).V i = ULift K ⊗ X.V i
+-- We prove this by showing liftMap tensorOne.symm X.t = interchange oneObj.t X.t
+-- via: liftMap tensorOne (liftMap tensorOne.symm X.t) = X.t = liftMap tensorOne (interchange ...)
+private theorem one_mul_restrict_fwd (X : TensorObj K d) : Restrict (oneObj * X) X := by
+  refine ⟨fun i => tensorOne.symm.toLinearMap, ?_⟩
+  simp only [mul_t]
+  have hTO_symm_TO : (fun i => (tensorOne (K := K) (V := X.V i)).symm.toLinearMap ∘ₗ
+      (tensorOne (K := K) (V := X.V i)).toLinearMap) = fun _ => LinearMap.id := by
+    funext i; apply LinearMap.ext; intro v; simp [tensorOne]
+  have hTO_TO_symm : (fun i => (tensorOne (K := K) (V := X.V i)).toLinearMap ∘ₗ
+      (tensorOne (K := K) (V := X.V i)).symm.toLinearMap) = fun _ => LinearMap.id := by
+    funext i; apply LinearMap.ext; intro v; simp [tensorOne]
+  -- suffices: liftMap tensorOne (liftMap tensorOne.symm X.t) = liftMap tensorOne (interchange oneObj.t X.t)
+  -- since liftMap tensorOne is injective (has left inverse liftMap tensorOne.symm)
+  suffices liftMap (fun i => (tensorOne (K := K) (V := X.V i)).toLinearMap)
+      (liftMap (fun i => (tensorOne (K := K) (V := X.V i)).symm.toLinearMap) X.t) =
+      liftMap (fun i => (tensorOne (K := K) (V := X.V i)).toLinearMap) (interchange oneObj.t X.t) by
+    have hinj : Function.Injective
+        (liftMap (fun i => (tensorOne (K := K) (V := X.V i)).toLinearMap)) := by
+      intro a b hab
+      have := congr_arg (liftMap (fun i => (tensorOne (K := K) (V := X.V i)).symm.toLinearMap)) hab
+      rw [liftMap_comp, liftMap_comp] at this
+      rw [hTO_symm_TO] at this
+      unfold liftMap at this; simp at this
+      exact this
+    exact hinj this
+  rw [liftMap_comp, hTO_TO_symm, liftMap_id]
+  -- Now prove X.t = liftMap tensorOne (interchange oneObj.t X.t)
+  symm
   induction X.t using PiTensorProduct.induction_on with
   | smul_tprod c v =>
-    change liftMap (fun i => tensorOne.toLinearMap) (interchange (tprod K (fun _ => ULift.up 1)) (c • tprod K v)) = c • tprod K v
+    change liftMap (fun i => tensorOne.toLinearMap)
+      (interchange (tprod K (fun _ => ULift.up 1)) (c • tprod K v)) = c • tprod K v
     dsimp only [interchange, liftMap, interchangeMap, interchangeAux]
-    simp only [map_smul, PiTensorProduct.lift.tprod, MultilinearMap.coe_mk, MultilinearMap.compLinearMap_apply]
-    congr 1
-    apply congr_arg
-    funext i
+    simp only [map_smul, PiTensorProduct.lift.tprod, MultilinearMap.coe_mk,
+               MultilinearMap.compLinearMap_apply]
+    congr 1; apply congr_arg; funext i
     simp [tensorOne, uliftEquiv, TensorProduct.lid, TensorProduct.congr]
   | add t1 t2 ih1 ih2 =>
-    dsimp only [interchange, liftMap] at ih1 ih2 ⊢
-    simp only [map_add, ih1, ih2]
+    simp only [(interchange oneObj.t).map_add]
+    rw [show (liftMap (fun i => (tensorOne (K := K) (V := X.V i)).toLinearMap)
+                ((interchange oneObj.t) t1 + (interchange oneObj.t) t2)) =
+            (liftMap (fun i => (tensorOne (K := K) (V := X.V i)).toLinearMap)) ((interchange oneObj.t) t1) +
+            (liftMap (fun i => (tensorOne (K := K) (V := X.V i)).toLinearMap)) ((interchange oneObj.t) t2)
+          from (liftMap _).map_add _ _]
+    rw [ih1, ih2]
 
-theorem mul_one_isomorphic {X : TensorObj K d} : Isomorphic (X * oneObj) X := by
-  let h := mul_comm_isomorphic (X := X) (Y := oneObj)
-  exact isomorphic_trans h one_mul_isomorphic
+-- Restrict X (oneObj * X): f : (oneObj*X).V i = ULift K ⊗ X.V i →ₗ X.V i, i.e. tensorOne
+-- liftMap tensorOne (interchange oneObj.t X.t) = X.t
+theorem one_mul_isomorphic {X : TensorObj K d} :
+    Restrict (oneObj * X) X ∧ Restrict X (oneObj * X) :=
+  ⟨one_mul_restrict_fwd X,
+   ⟨fun i => tensorOne.toLinearMap, by
+    change liftMap (fun i => tensorOne.toLinearMap) (interchange oneObj.t X.t) = X.t
+    induction X.t using PiTensorProduct.induction_on with
+    | smul_tprod c v =>
+      change liftMap (fun i => tensorOne.toLinearMap) (interchange (tprod K (fun _ => ULift.up 1)) (c • tprod K v)) = c • tprod K v
+      dsimp only [interchange, liftMap, interchangeMap, interchangeAux]
+      simp only [map_smul, PiTensorProduct.lift.tprod, MultilinearMap.coe_mk, MultilinearMap.compLinearMap_apply]
+      congr 1; apply congr_arg; funext i
+      simp [tensorOne, uliftEquiv, TensorProduct.lid, TensorProduct.congr]
+    | add t1 t2 ih1 ih2 =>
+      dsimp only [interchange, liftMap] at ih1 ih2 ⊢
+      simp only [map_add, ih1, ih2]⟩⟩
 
-theorem mul_add_isomorphic {X Y Z : TensorObj K d} : Isomorphic (X * (Y + Z)) (X * Y + X * Z) := by
-  refine ⟨{ equiv := fun i => distribLeft, map_t := ?_ }⟩
+theorem mul_one_isomorphic {X : TensorObj K d} :
+    Restrict (X * oneObj) X ∧ Restrict X (X * oneObj) :=
+  let hc := mul_comm_isomorphic (X := X) (Y := oneObj)
+  let h1 := one_mul_isomorphic (X := X)
+  ⟨restrict_trans hc.1 h1.1, restrict_trans h1.2 hc.2⟩
 
-  -- Step A: Use linearity to split the sum
-  -- LHS is liftMap distribLeft (interchange X.t (Y+Z).t)
-  change liftMap (fun i => distribLeft.toLinearMap) (interchange X.t (Y + Z).t) = (X * Y + X * Z).t
-  change liftMap (fun i => distribLeft.toLinearMap) (interchange X.t (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) Y.t + liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) Z.t)) = _
-  rw [map_add, map_add] -- interchange and liftMap are linear
+-- Restrict (X*(Y+Z)) (X*Y+X*Z): f : (X*Y+X*Z).V i →ₗ (X*(Y+Z)).V i = distribLeft.symm
+-- liftMap distribLeft.symm (X*Y+X*Z).t = (X*(Y+Z)).t
+private theorem mul_add_restrict_fwd (X Y Z : TensorObj K d) : Restrict (X * (Y + Z)) (X * Y + X * Z) :=
+  ⟨fun i => distribLeft.symm.toLinearMap, by
+    simp only [mul_t, add_t]
+    -- need: liftMap distribLeft.symm ((liftMap inl) (interchange X.t Y.t) + (liftMap inr) (interchange X.t Z.t))
+    --     = interchange X.t ((liftMap inl) Y.t + (liftMap inr) Z.t)
+    have h1 : (fun i => (distribLeft (K := K) (M := X.V i) (N := Y.V i) (P := Z.V i)).symm.toLinearMap ∘ₗ
+               LinearMap.inl K (X.V i ⊗ Y.V i) (X.V i ⊗ Z.V i)) =
+              fun i => TensorProduct.map LinearMap.id (LinearMap.inl K (Y.V i) (Z.V i)) := by
+      funext i; apply LinearMap.ext; intro v
+      induction v using TensorProduct.induction_on with
+      | zero => simp
+      | tmul x y =>
+        simp only [LinearMap.comp_apply, LinearMap.inl_apply, distribLeft]
+        change (TensorProduct.prodRight K K (X.V i) (Y.V i) (Z.V i)).symm (x ⊗ₜ[K] y, 0) = _
+        rw [show (0 : X.V i ⊗[K] Z.V i) = x ⊗ₜ[K] (0 : Z.V i) by simp,
+            TensorProduct.prodRight_symm_tmul]
+        simp [TensorProduct.map_tmul]
+      | add a b iha ihb => simp [map_add, iha, ihb]
+    have h2 : (fun i => (distribLeft (K := K) (M := X.V i) (N := Y.V i) (P := Z.V i)).symm.toLinearMap ∘ₗ
+               LinearMap.inr K (X.V i ⊗ Y.V i) (X.V i ⊗ Z.V i)) =
+              fun i => TensorProduct.map LinearMap.id (LinearMap.inr K (Y.V i) (Z.V i)) := by
+      funext i; apply LinearMap.ext; intro v
+      induction v using TensorProduct.induction_on with
+      | zero => simp
+      | tmul x z =>
+        simp only [LinearMap.comp_apply, LinearMap.inr_apply, distribLeft]
+        change (TensorProduct.prodRight K K (X.V i) (Y.V i) (Z.V i)).symm (0, x ⊗ₜ[K] z) = _
+        rw [show (0 : X.V i ⊗[K] Y.V i) = x ⊗ₜ[K] (0 : Y.V i) by simp,
+            TensorProduct.prodRight_symm_tmul]
+        simp [TensorProduct.map_tmul]
+      | add a b iha ihb => simp [map_add, iha, ihb]
+    have key : (liftMap (fun i => (distribLeft (K := K) (M := X.V i) (N := Y.V i) (P := Z.V i)).symm.toLinearMap))
+        ((liftMap (fun i => LinearMap.inl K (X.V i ⊗ Y.V i) (X.V i ⊗ Z.V i))) ((interchange X.t) Y.t) +
+         (liftMap (fun i => LinearMap.inr K (X.V i ⊗ Y.V i) (X.V i ⊗ Z.V i))) ((interchange X.t) Z.t)) =
+        (interchange X.t) ((liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i))) Y.t +
+         (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i))) Z.t) := by
+      rw [(liftMap _).map_add, liftMap_comp, liftMap_comp, h1, h2,
+          liftMap_interchange, liftMap_interchange]
+      simp only [liftMap_id, ← map_add]
+    exact key⟩
 
-  congr 1
-  · -- Left summand: Y
-    -- Use helper reasoning inline to avoid expensive unification in rw
-    have h1 : interchange X.t (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) Y.t) =
-              liftMap (fun i => TensorProduct.map LinearMap.id (LinearMap.inl K (Y.V i) (Z.V i))) (interchange X.t Y.t) := by
-      conv_lhs => rw [← liftMap_id X] -- Only rewrite LHS X.t
-      rw [← liftMap_interchange]
-    rw [h1, liftMap_comp]
+-- Restrict (X*Y+X*Z) (X*(Y+Z)): f : (X*(Y+Z)).V i →ₗ (X*Y+X*Z).V i = distribLeft
+-- liftMap distribLeft (interchange X.t (Y+Z).t) = (X*Y+X*Z).t
+theorem mul_add_isomorphic {X Y Z : TensorObj K d} :
+    Restrict (X * (Y + Z)) (X * Y + X * Z) ∧ Restrict (X * Y + X * Z) (X * (Y + Z)) :=
+  ⟨mul_add_restrict_fwd X Y Z,
+   ⟨fun i => distribLeft.toLinearMap, by
+    change liftMap (fun i => distribLeft.toLinearMap) (interchange X.t (Y + Z).t) = (X * Y + X * Z).t
+    change liftMap (fun i => distribLeft.toLinearMap) (interchange X.t (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) Y.t + liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) Z.t)) = _
+    rw [map_add, map_add]
+    congr 1
+    · have h1 : interchange X.t (liftMap (fun i => LinearMap.inl K (Y.V i) (Z.V i)) Y.t) =
+                liftMap (fun i => TensorProduct.map LinearMap.id (LinearMap.inl K (Y.V i) (Z.V i))) (interchange X.t Y.t) := by
+        conv_lhs => rw [← liftMap_id X]
+        rw [← liftMap_interchange]
+      rw [h1, liftMap_comp]
+      apply congr_arg (fun h => liftMap h _)
+      funext i; apply LinearMap.ext; intro v
+      simp only [LinearMap.comp_apply, distribLeft, TensorProduct.prodRight, LinearEquiv.coe_coe]
+      induction v using TensorProduct.induction_on with
+      | zero => simp
+      | tmul x y => simp; change _ = (LinearMap.inl K (X.V i ⊗ Y.V i) (X.V i ⊗ Z.V i)) (x ⊗ₜ y); erw [LinearMap.inl_apply]
+      | add a b iha ihb => simp only [map_add, iha, ihb]
+    · have h1 : interchange X.t (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) Z.t) =
+                liftMap (fun i => TensorProduct.map LinearMap.id (LinearMap.inr K (Y.V i) (Z.V i))) (interchange X.t Z.t) := by
+        conv_lhs => rw [← liftMap_id X]
+        rw [← liftMap_interchange]
+      rw [h1, liftMap_comp]
+      apply congr_arg (fun h => liftMap h _)
+      funext i; apply LinearMap.ext; intro v
+      simp only [LinearMap.comp_apply, distribLeft, TensorProduct.prodRight, LinearEquiv.coe_coe]
+      induction v using TensorProduct.induction_on with
+      | zero => simp
+      | tmul x z => simp; change _ = (LinearMap.inr K (X.V i ⊗ Y.V i) (X.V i ⊗ Z.V i)) (x ⊗ₜ z); erw [LinearMap.inr_apply]
+      | add a b iha ihb => simp only [map_add, iha, ihb]⟩⟩
 
-    apply congr_arg (fun h => liftMap h _)
-    funext i; apply LinearMap.ext; intro v
-    -- This goal is: distribLeft (id ⊗ inl) v = inl v
-    simp only [LinearMap.comp_apply, distribLeft, TensorProduct.prodRight,
-               LinearEquiv.coe_coe]
-    induction v using TensorProduct.induction_on with
-    | zero => simp
-    | tmul x y =>
-      simp
-      change _ = (LinearMap.inl K (X.V i ⊗ Y.V i) (X.V i ⊗ Z.V i)) (x ⊗ₜ y)
-      erw [LinearMap.inl_apply]
-    | add a b iha ihb => simp only [map_add, iha, ihb]
+theorem add_mul_isomorphic {X Y Z : TensorObj K d} :
+    Restrict ((X + Y) * Z) (X * Z + Y * Z) ∧ Restrict (X * Z + Y * Z) ((X + Y) * Z) :=
+  let hc1 := mul_comm_isomorphic (X := X + Y) (Y := Z)
+  let hma := mul_add_isomorphic (X := Z) (Y := X) (Z := Y)
+  let hcX := mul_comm_isomorphic (X := Z) (Y := X)
+  let hcY := mul_comm_isomorphic (X := Z) (Y := Y)
+  let hadd := add_isomorphic hcX hcY
+  ⟨restrict_trans hc1.1 (restrict_trans hma.1 hadd.1),
+   restrict_trans hadd.2 (restrict_trans hma.2 hc1.2)⟩
 
-  · -- Right summand: Z
-    have h1 : interchange X.t (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) Z.t) =
-              liftMap (fun i => TensorProduct.map LinearMap.id (LinearMap.inr K (Y.V i) (Z.V i))) (interchange X.t Z.t) := by
-      conv_lhs => rw [← liftMap_id X]
-      rw [← liftMap_interchange]
-    rw [h1, liftMap_comp]
-
-    apply congr_arg (fun h => liftMap h _)
-    funext i; apply LinearMap.ext; intro v
-    simp only [LinearMap.comp_apply, distribLeft, TensorProduct.prodRight,
-               LinearEquiv.coe_coe]
-    induction v using TensorProduct.induction_on with
-    | zero => simp
-    | tmul x z =>
-      simp
-      change _ = (LinearMap.inr K (X.V i ⊗ Y.V i) (X.V i ⊗ Z.V i)) (x ⊗ₜ z)
-      erw [LinearMap.inr_apply]
-    | add a b iha ihb => simp only [map_add, iha, ihb]
-
-theorem add_mul_isomorphic {X Y Z : TensorObj K d} : Isomorphic ((X + Y) * Z) (X * Z + Y * Z) := by
-  let h1 := mul_comm_isomorphic (K := K) (d := d) (X := X + Y) (Y := Z)
-  let h2 := mul_add_isomorphic (K := K) (d := d) (X := Z) (Y := X) (Z := Y)
-  let h3 := add_isomorphic (X := Z * X) (Y := X * Z) (Z := Z * Y) (W := Y * Z)
-              (mul_comm_isomorphic (X := Z) (Y := X))
-              (mul_comm_isomorphic (X := Z) (Y := Y))
-  refine isomorphic_trans h1 (isomorphic_trans h2 h3)
-
-theorem zero_mul_isomorphic {X : TensorObj K d} : Isomorphic (zeroObj * X) zeroObj := by
-  refine ⟨{ equiv := fun i => tensorZero (V := X.V i), map_t := ?_ }⟩
-  change liftMap (fun i => (tensorZero (V := X.V i)).toLinearMap) (interchange zeroObj.t X.t) = zeroObj.t
-  dsimp [zeroObj] -- 0
-  erw [map_zero]
+theorem zero_mul_isomorphic {X : TensorObj K d} :
+    Restrict (zeroObj * X) zeroObj ∧ Restrict zeroObj (zeroObj * X) :=
+  -- Both zeroObj.t and (zeroObj * X).t are 0, so liftMap of any f applied to 0 = 0
+  have hzm : (zeroObj * X).t = 0 := by
+    simp only [mul_t, zeroObj]
+    exact (interchange (0 : PiTensorProduct K (fun _ : Fin d => PUnit))).map_zero
+  ⟨⟨fun _ => 0, by simp only [show (zeroObj : TensorObj K d).t = 0 from rfl, map_zero, hzm]⟩,
+   ⟨fun _ => 0, by simp only [hzm, map_zero, show (zeroObj : TensorObj K d).t = 0 from rfl]⟩⟩
 end TensorObj
 
 /-- The quotient of `TensorObj` by linear isomorphism. -/
@@ -725,42 +1070,39 @@ variable {X Y Z : TensorObj.{u, max u v} K d}
 theorem lift_unary_iso {f g : Tensor K d → Tensor K d} {F G : TensorObj K d → TensorObj K d}
     (h_lift_f : ∀ X, f (toTensor X) = toTensor (F X))
     (h_lift_g : ∀ X, g (toTensor X) = toTensor (G X))
-    (h_iso : ∀ X, Isomorphic (F X) (G X)) : ∀ x, f x = g x := by
+    (h_iso : ∀ X, Restrict (F X) (G X) ∧ Restrict (G X) (F X)) : ∀ x, f x = g x := by
   intro x
   induction x using Quotient.inductionOn with | h X =>
   change f (toTensor X) = g (toTensor X)
   rw [h_lift_f, h_lift_g]
-  apply Quotient.sound
-  exact h_iso X
+  exact Quotient.sound (h_iso X)
 
 /-- Helper to lift a binary operation equality proof from TensorObj to Tensor. -/
 theorem lift_binary_iso {f g : Tensor K d → Tensor K d → Tensor K d}
     {F G : TensorObj K d → TensorObj K d → TensorObj K d}
     (h_lift_f : ∀ X Y, f (toTensor X) (toTensor Y) = toTensor (F X Y))
     (h_lift_g : ∀ X Y, g (toTensor X) (toTensor Y) = toTensor (G X Y))
-    (h_iso : ∀ X Y, Isomorphic (F X Y) (G X Y)) : ∀ x y, f x y = g x y := by
+    (h_iso : ∀ X Y, Restrict (F X Y) (G X Y) ∧ Restrict (G X Y) (F X Y)) : ∀ x y, f x y = g x y := by
   intro x y
   induction x using Quotient.inductionOn with | h X =>
   induction y using Quotient.inductionOn with | h Y =>
   change f (toTensor X) (toTensor Y) = g (toTensor X) (toTensor Y)
   rw [h_lift_f, h_lift_g]
-  apply Quotient.sound
-  exact h_iso X Y
+  exact Quotient.sound (h_iso X Y)
 
 /-- Helper to lift a ternary operation equality proof from TensorObj to Tensor. -/
 theorem lift_ternary_iso {f g : Tensor K d → Tensor K d → Tensor K d → Tensor K d}
     {F G : TensorObj K d → TensorObj K d → TensorObj K d → TensorObj K d}
     (h_lift_f : ∀ X Y Z, f (toTensor X) (toTensor Y) (toTensor Z) = toTensor (F X Y Z))
     (h_lift_g : ∀ X Y Z, g (toTensor X) (toTensor Y) (toTensor Z) = toTensor (G X Y Z))
-    (h_iso : ∀ X Y Z, Isomorphic (F X Y Z) (G X Y Z)) : ∀ x y z, f x y z = g x y z := by
+    (h_iso : ∀ X Y Z, Restrict (F X Y Z) (G X Y Z) ∧ Restrict (G X Y Z) (F X Y Z)) : ∀ x y z, f x y z = g x y z := by
   intro x y z
   induction x using Quotient.inductionOn with | h X =>
   induction y using Quotient.inductionOn with | h Y =>
   induction z using Quotient.inductionOn with | h Z =>
   change f (toTensor X) (toTensor Y) (toTensor Z) = g (toTensor X) (toTensor Y) (toTensor Z)
   rw [h_lift_f, h_lift_g]
-  apply Quotient.sound
-  exact h_iso X Y Z
+  exact Quotient.sound (h_iso X Y Z)
 
 end QuotientHelpers
 

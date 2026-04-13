@@ -1,5 +1,4 @@
 import AsymptoticSpectra.Tensor.Tensor
-import AsymptoticSpectra.Tensor.BaseChange
 import Mathlib.LinearAlgebra.PiTensorProduct
 import Mathlib.LinearAlgebra.TensorProduct.Basic
 import Mathlib.RingTheory.Flat.Basic
@@ -254,6 +253,24 @@ theorem tensorToDualHom_naturality {A A' B B' : Type*}
   | add x y hx hy =>
     simp only [map_add, LinearMap.add_apply, hx, hy]
 
+variable {K}
+
+/-- Generalized tensorToDualHom naturality for linear maps (not just equivalences). -/
+theorem tensorToDualHom_map {A A' B B' : Type*}
+    [AddCommGroup A] [Module K A] [AddCommGroup A'] [Module K A']
+    [AddCommGroup B] [Module K B] [AddCommGroup B'] [Module K B']
+    (fA : A →ₗ[K] A') (fB : B →ₗ[K] B') (t : A ⊗[K] B) (f : Dual K A') :
+    tensorToDualHom K A' B' (TensorProduct.map fA fB t) f =
+    fB (tensorToDualHom K A B t (f ∘ₗ fA)) := by
+  induction t using TensorProduct.induction_on with
+  | zero => simp only [map_zero, LinearMap.zero_apply]
+  | tmul a b =>
+    simp only [TensorProduct.map_tmul, tensorToDualHom_tmul, LinearMap.coe_comp,
+      Function.comp_apply, LinearMap.map_smul]
+  | add x y ihx ihy => simp only [map_add, LinearMap.add_apply, ihx, ihy]
+
+variable (K)
+
 /-- The rank of `f ⊗ g` is the product of the ranks of `f` and `g`. -/
 theorem finrank_range_map {A B C D : Type*}
     [AddCommGroup A] [Module K A] [AddCommGroup B] [Module K B]
@@ -370,6 +387,68 @@ theorem flatteningRank_isomorphic (σ : Split (Fin d)) {X Y : TensorObj K d}
 
   rw [range_eq]
 
+/-- Auxiliary: splitTensorEquiv commutes with liftMap (linear map version). -/
+private theorem split_eq_liftMap (σ : Split (Fin d)) {X Y : TensorObj K d}
+    (f : ∀ i, Y.V i →ₗ[K] X.V i) (t : PiTensorProduct K Y.V) :
+    splitTensorEquiv σ (TensorObj.liftMap f t) =
+    TensorProduct.map
+      (TensorObj.liftMap (fun (i : σ.S) => f i.val))
+      (TensorObj.liftMap (fun (i : Sc σ) => f i.val))
+      (splitTensorEquiv σ t) := by
+  induction t using PiTensorProduct.induction_on with
+  | smul_tprod r v =>
+    simp only [map_smul]
+    congr 1
+    rw [TensorObj.liftMap_tprod]
+    simp only [splitTensorEquiv, LinearEquiv.trans_apply]
+    show (PiTensorProduct.tmulEquivDep K _).symm
+        ((PiTensorProduct.reindex K X.V (splitEquiv σ).symm) (tprod K (fun i => f i (v i)))) =
+      TensorProduct.map _ _ ((PiTensorProduct.tmulEquivDep K _).symm
+        ((PiTensorProduct.reindex K Y.V (splitEquiv σ).symm) (tprod K v)))
+    rw [PiTensorProduct.reindex_tprod, PiTensorProduct.reindex_tprod,
+        PiTensorProduct.tmulEquivDep_symm_apply, PiTensorProduct.tmulEquivDep_symm_apply,
+        TensorProduct.map_tmul]
+    congr 1
+    · change _ = (TensorObj.liftMap (fun i : σ.S => f i.val)) (tprod K _)
+      simp only [TensorObj.liftMap_tprod]; rfl
+    · change _ = (TensorObj.liftMap (fun i : Sc σ => f i.val)) (tprod K _)
+      simp only [TensorObj.liftMap_tprod]; rfl
+  | add t1 t2 ih1 ih2 => simp only [map_add, ih1, ih2]
+
+/-- Flattening rank is monotone under restriction. -/
+theorem flatteningRank_mono (σ : Split (Fin d)) {X Y : TensorObj K d}
+    (h : TensorObj.Restrict X Y) : flatteningRank σ X ≤ flatteningRank σ Y := by
+  obtain ⟨f, hf⟩ := h
+  let fA := TensorObj.liftMap (fun (i : σ.S) => f i.val)
+  let fB := TensorObj.liftMap (fun (i : Sc σ) => f i.val)
+  have split_eq : splitTensorEquiv σ X.t =
+      TensorProduct.map fA fB (splitTensorEquiv σ Y.t) := hf ▸ split_eq_liftMap σ f Y.t
+  have flatteningMap_eq : flatteningMap σ X =
+      fB.comp ((flatteningMap σ Y).comp fA.dualMap) := by
+    ext g
+    simp only [flatteningMap, LinearMap.comp_apply]
+    rw [split_eq]
+    exact tensorToDualHom_map fA fB (splitTensorEquiv σ Y.t) g
+  unfold flatteningRank
+  rw [flatteningMap_eq]
+  haveI := X.finiteDimensional
+  haveI := Y.finiteDimensional
+  haveI : FiniteDimensional K (⨂[K] i : σ.S, Y.V i) :=
+    Module.Finite.of_basis (Basis.piTensorProduct (fun i => Module.Free.chooseBasis K (Y.V i)))
+  haveI : FiniteDimensional K (⨂[K] i : Sc σ, X.V i) :=
+    Module.Finite.of_basis (Basis.piTensorProduct (fun i => Module.Free.chooseBasis K (X.V i)))
+  have h_range : LinearMap.range (fB.comp ((flatteningMap σ Y).comp fA.dualMap)) ≤
+      Submodule.map fB (LinearMap.range (flatteningMap σ Y)) := by
+    rintro x ⟨g, rfl⟩
+    exact ⟨(flatteningMap σ Y) (fA.dualMap g), ⟨fA.dualMap g, rfl⟩, rfl⟩
+  exact (Submodule.finrank_mono h_range).trans (Submodule.finrank_map_le fB _)
+
+/-- Flattening rank is invariant under mutual restriction. -/
+theorem flatteningRank_restrict_equiv (σ : Split (Fin d)) {X Y : TensorObj K d}
+    (h : TensorObj.Restrict X Y ∧ TensorObj.Restrict Y X) :
+    flatteningRank σ X = flatteningRank σ Y :=
+  Nat.le_antisymm (flatteningRank_mono σ h.1) (flatteningRank_mono σ h.2)
+
 end Isomorphism
 
 end Flattening
@@ -379,10 +458,10 @@ namespace Tensor
 variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
 
 /-- Flattening rank lifted to the quotient `Tensor K d`.
-    This is well-defined since flattening rank is invariant under isomorphism. -/
+    This is well-defined since flattening rank is invariant under mutual restriction. -/
 noncomputable def flatteningRank (σ : Split (Fin d)) : Tensor K d → ℕ :=
   Quotient.lift (fun X => AsymptoticSpectra.flatteningRank σ X)
-    (fun _ _ h => flatteningRank_isomorphic σ h)
+    (fun _ _ h => flatteningRank_restrict_equiv σ h)
 
 /-- The real-valued version of flattening rank on `Tensor K d`. -/
 noncomputable def flatteningRankReal (σ : Split (Fin d)) : Tensor K d → ℝ :=
@@ -499,21 +578,6 @@ theorem tensorToDualHom_map_inr_inr {A B C D : Type*}
     simp only [map_add, LinearMap.add_apply, ihx, ihy]
 
 variable {K}
-
-/-- Generalized tensorToDualHom naturality for linear maps (not just equivalences).
-    This shows tensorToDualHom (map fA fB t) f = fB (tensorToDualHom t (f ∘ fA)). -/
-theorem tensorToDualHom_map {A A' B B' : Type*}
-    [AddCommGroup A] [Module K A] [AddCommGroup A'] [Module K A']
-    [AddCommGroup B] [Module K B] [AddCommGroup B'] [Module K B']
-    (fA : A →ₗ[K] A') (fB : B →ₗ[K] B') (t : A ⊗[K] B) (f : Dual K A') :
-    tensorToDualHom K A' B' (TensorProduct.map fA fB t) f =
-    fB (tensorToDualHom K A B t (f ∘ₗ fA)) := by
-  induction t using TensorProduct.induction_on with
-  | zero => simp only [map_zero, LinearMap.zero_apply]
-  | tmul a b =>
-    simp only [TensorProduct.map_tmul, tensorToDualHom_tmul, LinearMap.coe_comp,
-      Function.comp_apply, LinearMap.map_smul]
-  | add x y ihx ihy => simp only [map_add, LinearMap.add_apply, ihx, ihy]
 
 theorem flatteningMap_add_decomp (X Y : TensorObj K d) :
     flatteningMap σ (X + Y) =

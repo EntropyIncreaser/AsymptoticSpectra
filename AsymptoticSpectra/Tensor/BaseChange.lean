@@ -188,13 +188,6 @@ theorem baseChangeProdEquiv_comp_baseChangeMap_inr (L : Type w) [Field L] [Algeb
   | add a b iha ihb =>
     ext <;> simp only [map_add, iha, ihb, Prod.add_def]
 
-theorem liftMap_tprod {ι : Type*} [Fintype ι] {V W : ι → Type*}
-    [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
-    [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
-    (f : ∀ i, V i →ₗ[K] W i) (v : ∀ i, V i) :
-    liftMap f (tprod K v) = tprod K (fun i => f i (v i)) := by
-  simp only [liftMap, PiTensorProduct.lift.tprod, MultilinearMap.compLinearMap_apply]
-
 omit [Fact (1 < d)] in
 theorem scalarExtensionMap_tprod (L : Type w) [Field L] [Algebra K L]
     {V : Fin d → Type v}
@@ -217,17 +210,6 @@ theorem interchange_tprod_L {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι
     [∀ i, AddCommGroup (W i)] [∀ i, Module L (W i)]
     (v : ∀ i, V i) (w : ∀ i, W i) :
     interchange (K := L) (tprod L v) (tprod L w) = tprod L (fun i => v i ⊗ₜ[L] w i) := by
-  dsimp [interchange]
-  rw [PiTensorProduct.lift.tprod]
-  dsimp [interchangeMap]
-  rw [PiTensorProduct.lift.tprod]
-  rfl
-
-theorem interchange_tprod_K {ι : Type*} [Fintype ι] [DecidableEq ι] {V W : ι → Type*}
-    [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
-    [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
-    (v : ∀ i, V i) (w : ∀ i, W i) :
-    interchange (tprod K v) (tprod K w) = tprod K (fun i => v i ⊗ₜ[K] w i) := by
   dsimp [interchange]
   rw [PiTensorProduct.lift.tprod]
   dsimp [interchangeMap]
@@ -268,6 +250,35 @@ theorem baseChangeRearrange_naturality (L : Type w) [Field L] [Algebra K L]
       rw [map_add, map_add, ihx, ihy, map_add, map_add]
   | add x y ih1 ih2 =>
     simp only [map_add, ih1, ih2]
+
+/-- An isomorphism induces mutual restriction (i.e. the equivalence relation of `tensorSetoid`). -/
+theorem isomorphic_restrict_equiv {X Y : TensorObj K d} (h : Isomorphic X Y) :
+    TensorObj.Restrict X Y ∧ TensorObj.Restrict Y X := by
+  obtain ⟨iso⟩ := h
+  refine ⟨⟨fun i => (iso.equiv i).symm.toLinearMap, ?_⟩,
+          ⟨fun i => (iso.equiv i).toLinearMap, iso.map_t⟩⟩
+  have h2 : liftMap (fun i => (iso.equiv i).symm.toLinearMap)
+              (liftMap (fun i => (iso.equiv i).toLinearMap) X.t) = X.t := by
+    rw [liftMap_comp]
+    conv_lhs => rw [show (fun i => (iso.equiv i).symm.toLinearMap.comp (iso.equiv i).toLinearMap) =
+        fun i => LinearMap.id from by ext i x; simp]
+    exact liftMap_id X
+  rw [iso.map_t] at h2
+  exact h2
+
+/-- Base change preserves Restrict. -/
+private theorem baseChange_restrict (L : Type w) [Field L] [Algebra K L]
+    {X Y : TensorObj K d} (h : TensorObj.Restrict X Y) :
+    TensorObj.Restrict (X.baseChange L) (Y.baseChange L) := by
+  obtain ⟨f, hf⟩ := h
+  refine ⟨fun i => baseChangeMap L (f i), ?_⟩
+  simp only [TensorObj.baseChange]
+  -- Goal: liftMap (fun i => baseChangeMap L (f i)) (baseChangeRearrange L (1 ⊗ Y.t))
+  --     = baseChangeRearrange L (1 ⊗ X.t)
+  have nat := baseChangeRearrange_naturality (d := d) L f (1 ⊗ₜ[K] Y.t)
+  simp only [TensorProduct.map_tmul, LinearMap.id_apply] at nat
+  rw [hf] at nat
+  exact nat
 
 /-- Base change preserves isomorphism. -/
 theorem baseChange_isomorphic (L : Type w) [Field L] [Algebra K L]
@@ -569,22 +580,23 @@ variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
 
 /-- Base change of a tensor along a field extension K → L. -/
 def baseChange (L : Type w) [Field L] [Algebra K L] : Tensor.{u, v} K d →+* Tensor.{w, max u v w} L d where
-  toFun := Quotient.map (TensorObj.baseChange L) (fun _ _ h => TensorObj.baseChange_isomorphic L h)
+  toFun := Quotient.map (TensorObj.baseChange L)
+    (fun _ _ ⟨h1, h2⟩ => ⟨TensorObj.baseChange_restrict L h1, TensorObj.baseChange_restrict L h2⟩)
   map_zero' := by
     apply Quotient.sound
-    exact TensorObj.baseChange_zero L
+    exact TensorObj.isomorphic_restrict_equiv (TensorObj.baseChange_zero L)
   map_one' := by
     apply Quotient.sound
-    exact TensorObj.baseChange_one L
+    exact TensorObj.isomorphic_restrict_equiv (TensorObj.baseChange_one L)
   map_add' := by
     apply Quotient.ind₂
     intro X Y
     apply Quotient.sound
-    exact TensorObj.baseChange_add L X Y
+    exact TensorObj.isomorphic_restrict_equiv (TensorObj.baseChange_add L X Y)
   map_mul' := by
     apply Quotient.ind₂
     intro X Y
     apply Quotient.sound
-    exact TensorObj.baseChange_mul L X Y
+    exact TensorObj.isomorphic_restrict_equiv (TensorObj.baseChange_mul L X Y)
 
 end Tensor
