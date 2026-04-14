@@ -28,7 +28,8 @@ This subdirectory develops the **tensor-product semiring** used as the primary e
 - Defines `TensorObj.Restrict X Y`: `X` restricts to `Y` if there exist linear maps `f_i : Y.V_i → X.V_i` such that `(⨂ f_i)(Y.t) = X.t`; defines `Tensor.Restrict` on the quotient.
 - Proves `Restrict` is a preorder (reflexivity, transitivity) and respects isomorphism.
 - Establishes that `flatteningRank` is monotone under restriction.
-- Constructs the `StrassenPreorder` instance on `Tensor K d` (several axioms currently have `sorry`).
+- Proves `tensor_le_natCast_iff`: `⟦X⟧ ≤ (r : Tensor K d)` iff `X.t` is a sum of `r` pure tensors.
+- Constructs the `StrassenPreorder` instance on `Tensor K d` (no remaining `sorry`).
 
 ---
 

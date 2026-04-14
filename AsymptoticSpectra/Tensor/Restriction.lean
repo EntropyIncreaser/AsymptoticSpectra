@@ -3,6 +3,8 @@ import AsymptoticSpectra.Tensor.Flattening
 import AsymptoticSpectra.Structures
 import AsymptoticSpectra.Spectrum
 import Mathlib.LinearAlgebra.PiTensorProduct.Dual
+import Mathlib.LinearAlgebra.PiTensorProduct.Basis
+import Mathlib.LinearAlgebra.FreeModule.Finite.Basic
 
 universe u v w
 
@@ -144,7 +146,134 @@ theorem restrict_iff_sum_tprod {X : TensorObj K d} {r : ℕ} :
 /-- diagObj r ≤ (r : Tensor K d) -/
 private theorem diagObj_le_natCast (r : ℕ) :
     (toTensor (diagObj r) : Tensor K d) ≤ (r : Tensor K d) := by
-  sorry
+  induction r with
+  | zero =>
+      -- diagObj 0 has t = 0, so it restricts to zeroObj
+      show TensorObj.Restrict (diagObj (K := K) (d := d) 0) (zeroObj (K := K) (d := d))
+      refine ⟨fun _ => 0, ?_⟩
+      show liftMap (fun _ => (0 : (zeroObj (K := K) (d := d)).V _ →ₗ[K]
+          (diagObj (K := K) (d := d) 0).V _)) (zeroObj.t) = (diagObj 0).t
+      have hzt : (zeroObj (K := K) (d := d)).t = 0 := rfl
+      have hdt : (diagObj (K := K) (d := d) 0).t = 0 := by simp [diagObj]; rfl
+      rw [hzt, map_zero, hdt]
+  | succ n ih =>
+      -- We show diagObj (n+1) ≤ diagObj n + oneObj in TensorObj,
+      -- using restrict_iff_sum_tprod (backward direction):
+      -- exhibit v : Fin (n+1) → ∀ i, (diagObj n + oneObj).V i such that
+      -- (diagObj n + oneObj).t = ∑ j, tprod K (v j)
+      -- Then combine with ih and the SemiringPreorder monotonicity.
+      -- Strategy: use diagObj 1 (V i = Fin 1 → K, Type u) instead of oneObj (V i = ULift K)
+      -- to avoid universe mismatch. Then:
+      --   diagObj (n+1) ≤ diagObj n + diagObj 1   (TensorObj restriction, all in Type u)
+      --   toTensor (diagObj 1) = 1                 (iso with oneObj)
+      --   diagObj n + diagObj 1 ≤ ↑n + 1 = ↑(n+1) (by ih)
+      -- First: diagObj (n+1) ≤ diagObj n + diagObj 1 (as TensorObj, all Type u)
+      have hstep : TensorObj.Restrict (diagObj (K := K) (d := d) (n + 1))
+          (diagObj (K := K) (d := d) n + diagObj (K := K) (d := d) 1) := by
+        -- Work with explicit types: (diagObj n + diagObj 1).V i = (Fin n → K) × (Fin 1 → K)
+        --                           (diagObj (n+1)).V i = Fin (n+1) → K
+        -- f i maps (v, w) ↦ Fin.lastCases (w 0) (v ·)
+        let fFst : (Fin n → K) →ₗ[K] (Fin (n + 1) → K) :=
+          (Pi.basisFun K (Fin n)).constr K
+            (fun j' => Pi.basisFun K (Fin (n + 1)) (Fin.castSucc j'))
+        let fSnd : (Fin 1 → K) →ₗ[K] (Fin (n + 1) → K) :=
+          (Pi.basisFun K (Fin 1)).constr K
+            (fun _ => Pi.basisFun K (Fin (n + 1)) (Fin.last n))
+        -- The key computation: liftMap (fFst.coprod fSnd) (diagObj n + diagObj 1).t
+        --   = (diagObj (n+1)).t
+        -- We prove this by showing both equal ∑ j : Fin (n+1), tprod K (fun _ => Pi.single j 1)
+        have hkey : liftMap (fun _ : Fin d => fFst.coprod fSnd)
+            ((diagObj (K := K) (d := d) n + diagObj (K := K) (d := d) 1).t) =
+            (diagObj (K := K) (d := d) (n + 1)).t := by
+          simp only [diagObj, add_t]
+          -- Both sums are in PiTensorProduct K (fun _ : Fin d => (Fin n → K) × (Fin 1 → K))
+          -- The liftMap is of type:
+          --   PiTensorProduct K (fun _ => (Fin n → K) × (Fin 1 → K)) →ₗ PiTensorProduct K (fun _ => Fin (n+1) → K)
+          -- Proceed by pure tensor computation
+          -- Apply map_add, then liftMap_comp to merge the two nested liftMaps
+          rw [map_add,
+              liftMap_comp (fun _ => fFst.coprod fSnd) (fun _ => LinearMap.inl K (Fin n → K) (Fin 1 → K)),
+              liftMap_comp (fun _ => fFst.coprod fSnd) (fun _ => LinearMap.inr K (Fin n → K) (Fin 1 → K))]
+          -- Now simplify: (coprod fFst fSnd) ∘ inl = fFst, (coprod fFst fSnd) ∘ inr = fSnd
+          simp only [LinearMap.coprod_inl, LinearMap.coprod_inr]
+          -- Compute liftMap fFst and liftMap fSnd on pure tensor sums
+          simp only [map_sum, liftMap_tprod]
+          -- fFst (Pi.single j' 1) = Pi.basisFun K (Fin n) → Pi.basisFun K (Fin (n+1)) (castSucc)
+          -- by Basis.constr_basis
+          have hfFst : ∀ j' : Fin n, fFst (Pi.single j' 1) =
+              Pi.single (Fin.castSucc j') (1 : K) := fun j' => by
+            have hb : Pi.single j' (1 : K) = Pi.basisFun K (Fin n) j' := by
+              simp [Pi.basisFun_apply]
+            rw [hb]
+            show ((Pi.basisFun K (Fin n)).constr K
+              (fun j'' => Pi.basisFun K (Fin (n + 1)) (Fin.castSucc j'')))
+              (Pi.basisFun K (Fin n) j') = Pi.single (Fin.castSucc j') 1
+            rw [Module.Basis.constr_basis]
+            simp [Pi.basisFun_apply]
+          have hfSnd : fSnd (Pi.single (0 : Fin 1) (1 : K)) =
+              Pi.single (Fin.last n) (1 : K) := by
+            have hb : Pi.single (0 : Fin 1) (1 : K) = Pi.basisFun K (Fin 1) 0 := by
+              simp [Pi.basisFun_apply]
+            rw [hb]
+            show ((Pi.basisFun K (Fin 1)).constr K
+              (fun _ => Pi.basisFun K (Fin (n + 1)) (Fin.last n)))
+              (Pi.basisFun K (Fin 1) 0) = Pi.single (Fin.last n) 1
+            rw [Module.Basis.constr_basis]
+            simp [Pi.basisFun_apply]
+          simp only [hfFst]
+          -- For fSnd sum: ∑ j : Fin 1, ... = the single term at j = 0
+          simp only [Fin.sum_univ_one]
+          -- goal shape: (∑ x, tprod (castSucc)) + tprod (fSnd (Pi.single 0 1))
+          --           = ∑ j : Fin (n+1), tprod (Pi.single j 1)
+          conv_lhs =>
+            rw [show (fun _ : Fin d => fSnd (Pi.single (0 : Fin 1) (1 : K))) =
+                fun _ : Fin d => Pi.single (Fin.last n) (1 : K) from
+              funext (fun _ => hfSnd)]
+          -- RHS: split ∑ j : Fin (n+1) into castSucc part + last part
+          conv_rhs => rw [Fin.sum_univ_castSucc]
+        exact ⟨fun _ => fFst.coprod fSnd, hkey⟩
+      -- Second: toTensor (diagObj 1) = (1 : Tensor K d)
+      -- Both diagObj 1 and oneObj live in TensorObj.{u, max u v}, so restriction is well-typed.
+      have hone : toTensor (diagObj (K := K) (d := d) 1) = (1 : Tensor K d) := by
+        apply Quotient.sound
+        constructor
+        · -- Restrict (diagObj 1) oneObj: f i : oneObj.V i →ₗ (diagObj 1).V i
+          --   i.e., ULift.{v} K →ₗ Fin 1 → K,  via u ↦ fun _ => u.down
+          refine ⟨fun _ => (show (oneObj (K := K) (d := d)).V 0 →ₗ[K]
+                (diagObj (K := K) (d := d) 1).V 0 from
+                { toFun    := fun u _ => u.down
+                  map_add' := fun _ _ => rfl
+                  map_smul' := fun _ _ => rfl }), ?_⟩
+          -- Goal: liftMap f oneObj.t = (diagObj 1).t
+          -- Unfold oneObj.t and diagObj.t explicitly
+          change liftMap _ (tprod K (fun _ : Fin d => ULift.up (1 : K))) =
+              ∑ j : Fin 1, tprod K (fun _ : Fin d => Pi.single j (1 : K))
+          rw [liftMap_tprod, Finset.univ_unique, Finset.sum_singleton]
+          -- goal: tprod K (fun i => f (ULift.up 1)) = tprod K (fun _ => Pi.single 0 1)
+          -- f (ULift.up 1) = fun _ => 1 = Pi.single 0 1  (Fin 1 has one element)
+          congr 1; funext _
+          ext j; fin_cases j; rfl
+        · -- Restrict oneObj (diagObj 1): f i : (diagObj 1).V i →ₗ oneObj.V i
+          --   i.e., Fin 1 → K →ₗ ULift.{v} K,  via v ↦ ULift.up (v 0)
+          let fDown : (diagObj (K := K) (d := d) 1).V 0 →ₗ[K] (oneObj (K := K) (d := d)).V 0 :=
+            { toFun    := fun v => ULift.up (v 0)
+              map_add' := fun _ _ => rfl
+              map_smul' := fun _ _ => rfl }
+          refine ⟨fun _ => fDown, ?_⟩
+          -- Goal: liftMap (fun _ => fDown) (diagObj 1).t = oneObj.t
+          change liftMap (fun _ : Fin d => fDown)
+              (∑ j : Fin 1, tprod K (fun _ : Fin d => Pi.single j (1 : K))) =
+              tprod K (fun _ : Fin d => ULift.up (1 : K))
+          simp only [Finset.univ_unique, Finset.sum_singleton, liftMap_tprod, fDown]
+          congr 1
+      -- Chain: diagObj (n+1) ≤ diagObj n + diagObj 1 ≤ ↑n + 1 = ↑(n+1)
+      have hle1 : (toTensor (diagObj (K := K) (d := d) (n + 1)) : Tensor K d) ≤
+          toTensor (diagObj n) + toTensor (diagObj 1) := hstep
+      have hle2 : (toTensor (diagObj (K := K) (d := d) n) : Tensor K d) + toTensor (diagObj 1) ≤
+          (n : Tensor K d) + 1 := by
+        rw [hone]; exact instSemiringPreorder.add_right _ _ ih 1
+      have hcast : (n : Tensor K d) + 1 = ↑(n + 1) := by push_cast; ring
+      exact le_trans hle1 (hcast ▸ hle2)
 
 /-- X.t = 0 implies toTensor X = 0 -/
 private theorem toTensor_eq_zero_of_t_eq_zero {X : TensorObj K d} (h : X.t = 0) :
@@ -294,6 +423,85 @@ private theorem restrict_one_le_of_t_ne_zero (X : TensorObj K d) (hX : X.t ≠ 0
            _ = b := inv b
   exact hinj (huf.trans hone.symm)
 
+private theorem diagObj_one_eq_one :
+    (toTensor (diagObj (K := K) (d := d) 1) : Tensor K d) = 1 := by
+  apply Quotient.sound
+  constructor
+  · refine ⟨fun _ => (show (oneObj (K := K) (d := d)).V 0 →ₗ[K]
+          (diagObj (K := K) (d := d) 1).V 0 from
+          { toFun    := fun u _ => u.down
+            map_add' := fun _ _ => rfl
+            map_smul' := fun _ _ => rfl }), ?_⟩
+    change liftMap _ (tprod K (fun _ : Fin d => ULift.up (1 : K))) =
+        ∑ j : Fin 1, tprod K (fun _ : Fin d => Pi.single j (1 : K))
+    rw [liftMap_tprod, Finset.univ_unique, Finset.sum_singleton]
+    congr 1; funext _; ext j; fin_cases j; rfl
+  · let fDown : (diagObj (K := K) (d := d) 1).V 0 →ₗ[K] (oneObj (K := K) (d := d)).V 0 :=
+      { toFun    := fun v => ULift.up (v 0)
+        map_add' := fun _ _ => rfl
+        map_smul' := fun _ _ => rfl }
+    refine ⟨fun _ => fDown, ?_⟩
+    change liftMap (fun _ : Fin d => fDown)
+        (∑ j : Fin 1, tprod K (fun _ : Fin d => Pi.single j (1 : K))) =
+        tprod K (fun _ : Fin d => ULift.up (1 : K))
+    simp only [Finset.univ_unique, Finset.sum_singleton, liftMap_tprod, fDown]
+    congr 1
+
+/-- (r : Tensor K d) ≤ toTensor (diagObj r) -/
+private theorem natCast_le_diagObj (r : ℕ) :
+    (r : Tensor K d) ≤ (toTensor (diagObj (K := K) (d := d) r) : Tensor K d) := by
+  induction r with
+  | zero =>
+    simp only [Nat.cast_zero]
+    exact instSemiringPreorder.zero_le _
+  | succ n ih =>
+    -- (n+1 : Tensor K d) = n + 1 ≤ toTensor (diagObj n) + toTensor (diagObj 1)
+    --                                = toTensor (diagObj n + diagObj 1)
+    --                               ≤ toTensor (diagObj (n+1))
+    -- The last step: diagObj n + diagObj 1 restricts to diagObj (n+1).
+    -- This is the reverse of hstep in diagObj_le_natCast.
+    -- We use restrict_iff_sum_tprod: (diagObj n + diagObj 1).t =
+    --   ∑ j : Fin (n+1), tprod K (fun _ => Pi.single j 1)  =  (diagObj (n+1)).t
+    -- so TensorObj.Restrict (diagObj n + diagObj 1) (diagObj (n+1))
+    have hstep : TensorObj.Restrict (diagObj (K := K) (d := d) n + diagObj (K := K) (d := d) 1)
+        (diagObj (K := K) (d := d) (n + 1)) := by
+      -- Strategy: use restrict_iff_sum_tprod to reduce to showing (diagObj n + diagObj 1).t
+      -- is a sum of (n+1) pure tensors in V i = (Fin n → K) × (Fin 1 → K).
+      -- v (castSucc k) _ = (Pi.single k 1, 0)
+      -- v (last n)     _ = (0, Pi.single 0 1)
+      rw [restrict_iff_sum_tprod]
+      refine ⟨fun j _ => Fin.lastCases (0, Pi.single 0 1) (fun k => (Pi.single k 1, 0)) j, ?_⟩
+      simp only [add_t, diagObj]
+      -- Goal: liftMap inl (∑ j:Fin n, tprod (Pi.single j 1)) + liftMap inr (∑ j:Fin 1, ...) =
+      --       ∑ x:Fin(n+1), tprod (lastCases ... x)
+      -- Expand RHS via Fin.sum_univ_castSucc, simplify lastCases, then distribute liftMap on LHS
+      conv_rhs => rw [Fin.sum_univ_castSucc]
+      simp only [Fin.lastCases_castSucc, Fin.lastCases_last]
+      -- RHS = (∑ k:Fin n, tprod (fun _ => (Pi.single k 1, 0))) + tprod (fun _ => (0, Pi.single 0 1))
+      -- Distribute liftMap inl and inr on LHS
+      rw [map_sum, Fin.sum_univ_one]
+      -- LHS = (∑ k:Fin n, liftMap inl (tprod (Pi.single k 1))) + liftMap inr (tprod (Pi.single 0 1))
+      simp only [liftMap_tprod, LinearMap.inl_apply, LinearMap.inr_apply]
+      rfl
+    have hone : toTensor (diagObj (K := K) (d := d) 1) = (1 : Tensor K d) := diagObj_one_eq_one
+    rw [show (↑(n + 1) : Tensor K d) = ↑n + 1 by push_cast; ring]
+    calc (↑n : Tensor K d) + 1
+        = ↑n + toTensor (diagObj 1) := by rw [hone]
+      _ ≤ toTensor (diagObj n) + toTensor (diagObj 1) :=
+            instSemiringPreorder.add_right _ _ ih _
+      _ ≤ toTensor (diagObj (n + 1)) := hstep
+
+/-- `⟦X⟧ ≤ (r : Tensor K d)` iff `X.t` is a sum of `r` pure tensors.
+    (Stated for `X : TensorObj.{u, u} K d`, i.e., component spaces in the same universe as `K`.) -/
+theorem tensor_le_natCast_iff {X : TensorObj.{u, u} K d} {r : ℕ} :
+    (toTensor X : Tensor K d) ≤ (r : Tensor K d) ↔
+    ∃ v : Fin r → ∀ i, X.V i, X.t = ∑ j, tprod K (fun i => v j i) := by
+  constructor
+  · intro h
+    exact restrict_iff_sum_tprod.mp (le_trans h (natCast_le_diagObj r))
+  · rintro ⟨v, hv⟩
+    exact le_trans (restrict_iff_sum_tprod.mpr ⟨v, hv⟩) (diagObj_le_natCast r)
+
 private theorem restrict_lower (X : TensorObj K d) :
     (toTensor X : Tensor K d) = 0 ∨ TensorObj.Restrict oneObj X := by
   by_cases h : X.t = 0
@@ -311,6 +519,67 @@ instance : StrassenPreorder (Tensor K d) where
     exact restrict_lower X
   upper_archimedean := fun x => by
     induction x using Quotient.inductionOn with | h X => ?_
-    sorry
+    -- Strategy: express X.t as a sum of r pure tensors, then use restrict_iff_sum_tprod + diagObj_le_natCast.
+    -- Step 1: choose a basis bᵢ for each X.V i (possible since X.V i is finite-dimensional over K).
+    haveI hfree : ∀ i, Module.Free K (X.V i) := fun _ => inferInstance
+    haveI hfin  : ∀ i, Module.Finite K (X.V i) := fun _ => inferInstance
+    -- Step 2: build the basis of ⨂ X.V i via Basis.piTensorProduct.
+    let b : ∀ i : Fin d, Module.Basis (Module.Free.ChooseBasisIndex K (X.V i)) K (X.V i) :=
+      fun i => Module.Free.chooseBasis K (X.V i)
+    haveI hκ_fintype : ∀ i : Fin d, Fintype (Module.Free.ChooseBasisIndex K (X.V i)) :=
+      fun i => inferInstance
+    haveI hκ_decidable : ∀ i : Fin d, DecidableEq (Module.Free.ChooseBasisIndex K (X.V i)) :=
+      fun _ => Classical.decEq _
+    let B : Module.Basis (∀ i : Fin d, Module.Free.ChooseBasisIndex K (X.V i)) K
+                  (PiTensorProduct K (X.V)) :=
+      Basis.piTensorProduct b
+    -- Step 3: r = Fintype.card of the basis index type.
+    let κ := fun i : Fin d => Module.Free.ChooseBasisIndex K (X.V i)
+    haveI : Fintype (∀ i : Fin d, κ i) := inferInstance
+    let r := Fintype.card (∀ i : Fin d, κ i)
+    -- Enumerate ∀ i, κ i as Fin r via Fintype.equivFin.
+    let e : (∀ i : Fin d, κ i) ≃ Fin r := Fintype.equivFin _
+    -- Step 4: express X.t as sum of r pure tensors, absorbing B.repr coefficients into component 0.
+    -- Use the first index i₀ : Fin d (exists since 1 < d implies 0 < d).
+    have h0d : 0 < d := Nat.lt_trans Nat.zero_lt_one Fact.out
+    let i₀ : Fin d := ⟨0, h0d⟩
+    -- For each p : ∀ i, κ i, define the pure tensor with scalar absorbed into component i₀:
+    --   w p i := if i = i₀ then (B.repr X.t p) • b i (p i) else b i (p i)
+    -- Then tprod K (w p) = (B.repr X.t p) • B p  (by multilinearity of tprod).
+    let w : (∀ i : Fin d, κ i) → ∀ i : Fin d, X.V i :=
+      fun p i => if i = i₀ then (B.repr X.t p) • b i (p i) else b i (p i)
+    -- Key: c • tprod K (fun i => b i (p i)) = tprod K (fun i => w p i)
+    -- by MultilinearMap.map_update_smul:
+    --   tprod K (update f i₀ (c • f i₀)) = c • tprod K (update f i₀ (f i₀))
+    --                                     = c • tprod K f  (update_eq_self)
+    -- and w p = update (fun i => b i (p i)) i₀ (c • b i₀ (p i₀))
+    have hw : ∀ p : ∀ i, κ i,
+        (B.repr X.t p) • B p = tprod K (fun i => w p i) := fun p => by
+      rw [Basis.piTensorProduct_apply]
+      set f := fun i : Fin d => b i (p i)
+      set c := B.repr X.t p
+      -- Show tprod K (fun i => w p i) = tprod K (Function.update f i₀ (c • f i₀))
+      have hw_eq : (fun i => w p i) = Function.update f i₀ (c • f i₀) := by
+        funext i
+        simp only [w, f, i₀]
+        split_ifs with h
+        · subst h; simp [c, Function.update_self]
+        · exact (Function.update_of_ne h (f := fun i => b i (p i)) _).symm
+      rw [hw_eq]
+      -- MultilinearMap.map_update_smul: tprod K (update f i₀ (c • f i₀)) = c • tprod K (update f i₀ (f i₀))
+      rw [(tprod K (s := X.V)).map_update_smul f i₀ c (f i₀), Function.update_eq_self]
+    -- v : Fin r → ∀ i, X.V i  (enumerate basis index via e)
+    let v : Fin r → ∀ i : Fin d, X.V i := fun j => w (e.symm j)
+    have hsum : X.t = ∑ j : Fin r, tprod K (fun i => v j i) := by
+      have hrepr : X.t = ∑ p : ∀ i, κ i, (B.repr X.t p) • B p := (B.sum_repr X.t).symm
+      -- rewrite each summand using hw, then reindex by e.symm
+      rw [hrepr]
+      conv_lhs => arg 2; ext p; rw [hw p]
+      -- now: ∑ p : ∀ i, κ i, ⨂ₜ[K] i, w p i = ∑ j : Fin r, ⨂ₜ[K] i, w (e.symm j) i
+      exact (Fintype.sum_equiv e.symm _ _ (fun j => rfl)).symm
+    -- Now use restrict_iff_sum_tprod to get TensorObj.Restrict X (diagObj r)
+    have hrestr : TensorObj.Restrict X (diagObj r) := restrict_iff_sum_tprod.mpr ⟨v, hsum⟩
+    -- Chain: toTensor X ≤ toTensor (diagObj r) ≤ ↑r
+    exact ⟨r, le_trans hrestr (diagObj_le_natCast r)⟩
 
 end Tensor
