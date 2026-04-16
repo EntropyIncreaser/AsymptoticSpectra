@@ -8,3 +8,5 @@ import AsymptoticSpectra.Tensor.Tensor
 import AsymptoticSpectra.Tensor.BaseChange
 import AsymptoticSpectra.Tensor.Flattening
 import AsymptoticSpectra.Tensor.Restriction
+import AsymptoticSpectra.Tensor.MatrixMult
+import AsymptoticSpectra.Tensor.Permutation

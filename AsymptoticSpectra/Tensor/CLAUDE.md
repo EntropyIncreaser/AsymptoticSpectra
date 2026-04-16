@@ -31,6 +31,19 @@ This subdirectory develops the **tensor-product semiring** used as the primary e
 - Proves `tensor_le_natCast_iff`: `⟦X⟧ ≤ (r : Tensor K d)` iff `X.t` is a sum of `r` pure tensors.
 - Constructs the `StrassenPreorder` instance on `Tensor K d` (no remaining `sorry`).
 
+### `Permutation.lean`
+- Defines `TensorObj.permuteSpaces σ X`: permutes the mode spaces of `X` by `σ ∈ Sₐ`, with mode `i` getting `X.V (σ.symm i)` and tensor element permuted via `PiTensorProduct.reindex K X.V σ`.
+- Proves `permuteSpaces` respects `TensorObj.Restrict` and direct sums, hence descends to `Tensor.permuteSpaces : Tensor K d → Tensor K d` (a ring homomorphism, with `mul` and `one` still `sorry`).
+- Constructs `AsymptoticSpectrumPoint.perm φ σ`: the permuted spectrum point `φ^σ(x) = φ(permuteSpaces σ x)`, still a spectrum point (monotonicity `sorry`).
+- Key lemma: `TensorObj.permuteSpaces_add_restrict` — reindexing commutes with `inl`/`inr` via `PiTensorProduct.map_reindex`.
+
+### `MatrixMult.lean`
+- Defines `MMObj n m p : TensorObj K 3` with mode spaces `Fin n × Fin m → K`, `Fin m × Fin p → K`, `Fin p × Fin n → K` and tensor element `∑ i j k, e_{ij} ⊗ e_{jk} ⊗ e_{ki}`.
+- Defines `MM n m p : Tensor K 3` and basic monotonicity/multiplicativity lemmas (currently `sorry`).
+- Defines `θ₁, θ₂, θ₃ : AsymptoticSpectrumPoint → ℝ` as `log φ(MM 2 1 1) / log 2` etc., and proves `θᵢ ∈ [0,1]` (currently `sorry`).
+- Defines `specMM : Set (ℝ × ℝ × ℝ)` as the image of the spectrum under `φ ↦ (θ₁, θ₂, θ₃)`; proves `specMM ⊆ [0,1]³` and `specMM` is compact.
+- Defines `matMulExp : ℝ` as `inf_n log_n AR(MM n n n)` and states its duality characterization `ω = sup_{specMM} (θ₁+θ₂+θ₃)` (currently `sorry`).
+
 ---
 
 ## Maintenance instructions
