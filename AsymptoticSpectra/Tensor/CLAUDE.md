@@ -31,6 +31,13 @@ This subdirectory develops the **tensor-product semiring** used as the primary e
 - Proves `tensor_le_natCast_iff`: `⟦X⟧ ≤ (r : Tensor K d)` iff `X.t` is a sum of `r` pure tensors.
 - Constructs the `StrassenPreorder` instance on `Tensor K d` (no remaining `sorry`).
 
+### `Degeneration.lean`
+- Defines `TensorObj.PolyFamily X Y`: a finite-support family of `K`-linear maps `A_i^{(j)} : Y.V_i →ₗ X.V_i` per mode `i`, representing a `K[T]`-linear map under the scalar-family encoding.
+- Defines `TensorObj.DegeneratesOfOrder X Y h`: `X` is a degeneration of `Y` at order `h`, meaning there exists a `PolyFamily` whose `T^k` coefficients vanish for `k < h` and whose `T^h` coefficient equals `X.t`.
+- Proves closure properties: `refl`, `add_right`, `mul_right`, `mul` (orders add), `trans` (orders compose as `(h₁+1)(h₂+1)-1`), and compatibility with restriction (`of_restrict_left/right`).
+- Lifts to `Tensor K d` as `Tensor.Degenerates`; proves `Restrict.degenerates` (restriction implies degeneration at order 0) and `Degenerates.asymptoticLe` (degeneration implies asymptotic restriction, via subexponential multiplier `(nh+1)^d`).
+- Constructs `Tensor.strassenPreorderOfDegenerates`: a `StrassenPreorder` on `Tensor K d` with `le := Degenerates`, and proves `asymptoticClosure_degenerates_eq`: degeneration and restriction have the same asymptotic closure. No remaining `sorry`.
+
 ### `Permutation.lean`
 - Defines `TensorObj.permuteSpaces σ X`: permutes the mode spaces of `X` by `σ ∈ Sₐ`, with mode `i` getting `X.V (σ.symm i)` and tensor element permuted via `PiTensorProduct.reindex K X.V σ`.
 - Proves `permuteSpaces` respects `TensorObj.Restrict` and direct sums, hence descends to `Tensor.permuteSpaces : Tensor K d → Tensor K d` (a ring homomorphism, with `mul` and `one` still `sorry`).
@@ -38,11 +45,11 @@ This subdirectory develops the **tensor-product semiring** used as the primary e
 - Key lemma: `TensorObj.permuteSpaces_add_restrict` — reindexing commutes with `inl`/`inr` via `PiTensorProduct.map_reindex`.
 
 ### `MatrixMult.lean`
-- Defines `MMObj n m p : TensorObj K 3` with mode spaces `Fin n × Fin m → K`, `Fin m × Fin p → K`, `Fin p × Fin n → K` and tensor element `∑ i j k, e_{ij} ⊗ e_{jk} ⊗ e_{ki}`.
-- Defines `MM n m p : Tensor K 3` and basic monotonicity/multiplicativity lemmas (currently `sorry`).
-- Defines `θ₁, θ₂, θ₃ : AsymptoticSpectrumPoint → ℝ` as `log φ(MM 2 1 1) / log 2` etc., and proves `θᵢ ∈ [0,1]` (currently `sorry`).
-- Defines `specMM : Set (ℝ × ℝ × ℝ)` as the image of the spectrum under `φ ↦ (θ₁, θ₂, θ₃)`; proves `specMM ⊆ [0,1]³` and `specMM` is compact.
-- Defines `matMulExp : ℝ` as `inf_n log_n AR(MM n n n)` and states its duality characterization `ω = sup_{specMM} (θ₁+θ₂+θ₃)` (currently `sorry`).
+- Defines `MMObj n m p : TensorObj K 3` and `MM n m p : Tensor K 3`; proves `MM_mul`, `MM_pow`, `MM_le_of_le`, `MM_le_mul`, `one_le_MM`, `MM_ne_zero`.
+- Defines `θ₁, θ₂, θ₃ : AsymptoticSpectrumPoint → ℝ` as `log φ(MM 2 1 1) / log 2` etc.; proves `θᵢ ∈ [0,1]` (under `RefinesCanonical P`) and `MM_eval`: `φ(MM n m p) = n^θ₁ · m^θ₂ · p^θ₃`.
+- Defines `specMM : Set (ℝ × ℝ × ℝ)` as the image of the spectrum under `φ ↦ (θ₁, θ₂, θ₃)`; proves `specMM ⊆ [0,1]³` and `specMM` is compact. Defines `cyclicPerm`/`transpPerm` and proves `MM_permuteSpaces_cyclic/transp`, `θ_perm_cyclic/transp`, `specMM_perm`.
+- Defines `matMulExp : ℝ` intrinsically as `iInf n, log (rank P_can (MM n n n)) / log n`; proves the canonical normalization `matMulExp_eq_log_AR_222`: `ω = log_2 AR(MM 2 2 2)`, and the duality characterization `matMulExp_eq_sup_specMM`: `ω = ⨆_φ (θ₁+θ₂+θ₃)(φ)` (modulo the upstream Duality `sorry`).
+- Proves `jensen_S3_convex` (3-cyclic Jensen averaging) and the **asymptotic sum inequality** `asymptotic_sum_inequality`: `AR(⊕ᵢ MM(nᵢ,mᵢ,pᵢ)) ≤ r` implies `∑ᵢ (nᵢ·mᵢ·pᵢ)^{ω/3} ≤ r`. No remaining `sorry` in this file (only the Duality black-box is upstream).
 
 ---
 
