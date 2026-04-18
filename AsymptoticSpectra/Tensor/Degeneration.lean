@@ -851,6 +851,73 @@ theorem restrict_of_t_add {X : TensorObj K d}
     rw [liftMap_comp]; simp only [LinearMap.coprod_inr]; exact liftMap_id ⟨X.V, t₂⟩
   rw [h1, h2, ht]
 
+/-! ### Border-rank characterization via `diagObj` -/
+
+open PiTensorProduct in
+/-- The `T^k` coefficient of a `PolyFamily X (Tensor.diagObj r)` expands as a
+sum of pure tensors indexed by `Fin r` and antidiagonal tuples. -/
+theorem PolyFamily.coeff_diagObj_expand {X : TensorObj.{u, u} K d} {r : ℕ}
+    (Φ : PolyFamily X (Tensor.diagObj r)) (k : ℕ) :
+    Φ.coeff k = ∑ j : Fin r,
+      (Finset.Nat.antidiagonalTuple d k).sum
+        (fun m => tprod K (fun i => Φ.A i (m i) (Pi.single j 1))) := by
+  unfold coeff
+  have : (Tensor.diagObj (K := K) (d := d) r).t =
+      ∑ j : Fin r, tprod K (fun (_ : Fin d) => Pi.single j (1 : K)) := rfl
+  simp_rw [this]
+  rw [Finset.sum_congr rfl (fun m _ => map_sum (liftMap fun i => (Φ.A i) (m i))
+    (fun j : Fin r => PiTensorProduct.tprod K fun _ => Pi.single j (1 : K)) Finset.univ),
+    Finset.sum_comm]
+  congr 1; ext j; congr 1; ext m
+  exact liftMap_tprod _ _
+
+open PiTensorProduct in
+/-- `DegeneratesOfOrder X (diagObj r) h` iff there exist finitely-supported
+polynomial vectors `v j i : ℕ →₀ X.V i` (for `j < r`, `i < d`) such that the
+`T^k` coefficient `∑_j ∑_{m : ∑ mᵢ = k} ⊗ᵢ v(j,i,mᵢ)` vanishes for `k < h`
+and equals `X.t` at `k = h`. -/
+theorem degeneratesOfOrder_diagObj_iff {X : TensorObj.{u, u} K d} {r h : ℕ} :
+    DegeneratesOfOrder X (Tensor.diagObj r) h ↔
+    ∃ v : Fin r → ∀ i : Fin d, ℕ →₀ X.V i,
+      (∀ k, k < h → ∑ j : Fin r, (Finset.Nat.antidiagonalTuple d k).sum
+        (fun m => tprod K (fun i => (v j i) (m i))) = 0) ∧
+      (∑ j : Fin r, (Finset.Nat.antidiagonalTuple d h).sum
+        (fun m => tprod K (fun i => (v j i) (m i))) = X.t) := by
+  constructor
+  · rintro ⟨Φ, hvan, hlead⟩
+    refine ⟨fun j i => (Φ.A i).mapRange (· (Pi.single j 1))
+      (LinearMap.zero_apply _), ?_, ?_⟩
+    · intro k hk
+      simp only [Finsupp.mapRange_apply, ← Φ.coeff_diagObj_expand]
+      exact hvan k hk
+    · simp only [Finsupp.mapRange_apply, ← Φ.coeff_diagObj_expand]
+      exact hlead
+  · rintro ⟨v, hvan, hlead⟩
+    have hsup : ∀ i k, ((Pi.basisFun K (Fin r)).constr K (fun j => v j i k) :
+        (Tensor.diagObj (K := K) (d := d) r).V i →ₗ[K] X.V i) ≠ 0 →
+        k ∈ Finset.univ.biUnion (fun j => (v j i).support) := by
+      intro i k hne; rw [Finset.mem_biUnion]
+      by_contra hall; push_neg at hall
+      exact hne (by
+        have : (fun j => v j i k) = 0 :=
+          funext fun j => Finsupp.notMem_support_iff.mp (hall j (Finset.mem_univ j))
+        rw [this]; exact map_zero _)
+    let Φ : PolyFamily X (Tensor.diagObj r) :=
+      ⟨fun i => Finsupp.onFinset _ _ (hsup i)⟩
+    have hcoeff : ∀ k, Φ.coeff k = ∑ j : Fin r,
+        (Finset.Nat.antidiagonalTuple d k).sum
+          (fun m => tprod K (fun i => (v j i) (m i))) := by
+      intro k; rw [Φ.coeff_diagObj_expand]
+      refine Finset.sum_congr rfl fun j _ => Finset.sum_congr rfl fun m _ => ?_
+      show tprod K (fun i => ((Pi.basisFun K (Fin r)).constr K
+        (fun j' => v j' i (m i))) (Pi.single j 1)) = _
+      congr 1; funext i
+      conv_lhs => rw [show Pi.single j (1 : K) = (Pi.basisFun K (Fin r)) j from
+        (Pi.basisFun_apply K (Fin r) j).symm]
+      exact Module.Basis.constr_basis (Pi.basisFun K (Fin r)) K _ j
+    exact ⟨Φ, fun k hk => (hcoeff k).trans (hvan k hk),
+      (hcoeff h).trans hlead⟩
+
 end TensorObj
 
 namespace Tensor
@@ -924,6 +991,45 @@ theorem DegeneratesOfOrder.mul {x₁ y₁ x₂ y₂ : Tensor K d} {h₁ h₂ : �
   induction x₂ using Quotient.inductionOn with | h X₂ => ?_
   induction y₂ using Quotient.inductionOn with | h Y₂ => ?_
   exact TensorObj.DegeneratesOfOrder.mul hdeg₁ hdeg₂
+
+theorem DegeneratesOfOrder.of_restrict_left {x x' y : Tensor K d} {h : ℕ}
+    (hRes : x' ≤ x) (hdeg : DegeneratesOfOrder x y h) :
+    DegeneratesOfOrder x' y h := by
+  induction x using Quotient.inductionOn with | h X => ?_
+  induction x' using Quotient.inductionOn with | h X' => ?_
+  induction y using Quotient.inductionOn with | h Y => ?_
+  exact TensorObj.DegeneratesOfOrder.of_restrict_left hRes hdeg
+
+theorem DegeneratesOfOrder.of_restrict_right {x y y' : Tensor K d} {h : ℕ}
+    (hRes : y ≤ y') (hdeg : DegeneratesOfOrder x y h) :
+    DegeneratesOfOrder x y' h := by
+  induction x using Quotient.inductionOn with | h X => ?_
+  induction y using Quotient.inductionOn with | h Y => ?_
+  induction y' using Quotient.inductionOn with | h Y' => ?_
+  exact TensorObj.DegeneratesOfOrder.of_restrict_right hRes hdeg
+
+open PiTensorProduct in
+/-- **Border-rank characterization**: `DegeneratesOfOrder ⟦X⟧ r h` iff there
+exist finitely-supported polynomial vectors `v j i : ℕ →₀ X.V i` such that the
+`T^k` coefficient vanishes for `k < h` and the `T^h` coefficient equals `X.t`.
+This is the degeneration analog of `tensor_le_natCast_iff`. -/
+theorem tensor_degeneratesOfOrder_natCast_iff
+    {X : TensorObj.{u, u} K d} {r : ℕ} {h : ℕ} :
+    DegeneratesOfOrder (toTensor X) (r : Tensor.{u, u} K d) h ↔
+    ∃ v : Fin r → ∀ i : Fin d, ℕ →₀ X.V i,
+      (∀ k, k < h → ∑ j : Fin r, (Finset.Nat.antidiagonalTuple d k).sum
+        (fun m => tprod K (fun i => (v j i) (m i))) = 0) ∧
+      (∑ j : Fin r, (Finset.Nat.antidiagonalTuple d h).sum
+        (fun m => tprod K (fun i => (v j i) (m i))) = X.t) := by
+  constructor
+  · intro hdeg
+    have hdeg' : TensorObj.DegeneratesOfOrder X (diagObj r) h :=
+      DegeneratesOfOrder.of_restrict_right (natCast_le_diagObj r) hdeg
+    exact TensorObj.degeneratesOfOrder_diagObj_iff.mp hdeg'
+  · intro hv
+    show DegeneratesOfOrder (toTensor X) (r : Tensor K d) h
+    exact DegeneratesOfOrder.of_restrict_right (diagObj_le_natCast r)
+      (TensorObj.degeneratesOfOrder_diagObj_iff.mpr hv)
 
 theorem Degenerates.refl (x : Tensor K d) : Degenerates x x :=
   ⟨0, DegeneratesOfOrder.refl x⟩

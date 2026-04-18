@@ -11,3 +11,4 @@ import AsymptoticSpectra.Tensor.Restriction
 import AsymptoticSpectra.Tensor.MatrixMult
 import AsymptoticSpectra.Tensor.Permutation
 import AsymptoticSpectra.Tensor.Degeneration
+import AsymptoticSpectra.Tensor.Schonhage

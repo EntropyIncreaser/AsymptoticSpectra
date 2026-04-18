@@ -91,7 +91,7 @@ theorem flatteningRank_mono (σ : AsymptoticSpectra.Split (Fin d)) :
     intro x y h
     induction x using Quotient.inductionOn with | h X => ?_
     induction y using Quotient.inductionOn with | h Y => ?_
-    simp only [AsymptoticSpectra.Tensor.flatteningRankReal, AsymptoticSpectra.Tensor.flatteningRank_mk]
+    simp only [AsymptoticSpectra.Tensor.flatteningRankReal]
     exact_mod_cast AsymptoticSpectra.flatteningRank_mono σ h
 
 open PiTensorProduct in
@@ -118,7 +118,7 @@ theorem restrict_iff_sum_tprod {X : TensorObj K d} {r : ℕ} :
         = ∑ j : Fin r, liftMap f ((PiTensorProduct.tprod K) fun x => Pi.single j (1 : K)) := by
           induction r with
           | zero => simp [liftMap]
-          | succ n ih => simp [map_add, ih]
+          | succ n ih => simp
       _ = ∑ j : Fin r, PiTensorProduct.tprod K (fun i : Fin d => f i (Pi.single j 1)) := by
           congr 1; ext j; exact liftMap_tprod_eq _
   · rintro ⟨v, hv⟩
@@ -135,7 +135,7 @@ theorem restrict_iff_sum_tprod {X : TensorObj K d} {r : ℕ} :
             ((PiTensorProduct.tprod K) fun x => Pi.single j (1 : K)) := by
           induction r with
           | zero => simp [liftMap]
-          | succ n ih => simp [map_add, ih]
+          | succ n ih => simp
       _ = ∑ j : Fin r, PiTensorProduct.tprod K (fun i : Fin d => v j i) := by
           congr 1; ext j
           rw [liftMap_tprod_eq]
@@ -144,7 +144,7 @@ theorem restrict_iff_sum_tprod {X : TensorObj K d} {r : ℕ} :
       _ = X.t := hv.symm
 
 /-- diagObj r ≤ (r : Tensor K d) -/
-private theorem diagObj_le_natCast (r : ℕ) :
+theorem diagObj_le_natCast (r : ℕ) :
     (toTensor (diagObj r) : Tensor K d) ≤ (r : Tensor K d) := by
   induction r with
   | zero =>
@@ -354,8 +354,7 @@ private theorem restrict_one_le_of_t_ne_zero (X : TensorObj K d) (hX : X.t ≠ 0
     simp only [LinearMap.compMultilinearMap_apply, LinearMap.coe_comp, Function.comp_apply,
                AlgEquiv.toLinearMap_apply, LinearMap.smul_apply, liftMap_tprod,
                PiTensorProduct.dualDistrib_apply, constantBaseRingEquiv_tprod]
-    simp only [g, f, uliftEquiv, LinearMap.coe_comp, Function.comp_apply, LinearMap.coe_mk,
-               AddHom.coe_mk, LinearEquiv.coe_mk, ULift.down_up]
+    simp only [g, f, uliftEquiv, LinearMap.coe_comp, Function.comp_apply, LinearMap.coe_mk, AddHom.coe_mk]
     show (∏ x, if x = ⟨0, hd_pos⟩ then c⁻¹ * ψ_pure x (w x) else ψ_pure x (w x)) =
         c⁻¹ • ∏ i, ψ_pure i (w i)
     conv_lhs => arg 2; ext i; rw [show (if i = ⟨0, hd_pos⟩ then c⁻¹ * ψ_pure i (w i) else
@@ -448,7 +447,7 @@ private theorem diagObj_one_eq_one :
     congr 1
 
 /-- (r : Tensor K d) ≤ toTensor (diagObj r) -/
-private theorem natCast_le_diagObj (r : ℕ) :
+theorem natCast_le_diagObj (r : ℕ) :
     (r : Tensor K d) ≤ (toTensor (diagObj (K := K) (d := d) r) : Tensor K d) := by
   induction r with
   | zero =>

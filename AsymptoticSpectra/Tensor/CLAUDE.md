@@ -36,6 +36,7 @@ This subdirectory develops the **tensor-product semiring** used as the primary e
 - Defines `TensorObj.DegeneratesOfOrder X Y h`: `X` is a degeneration of `Y` at order `h`, meaning there exists a `PolyFamily` whose `T^k` coefficients vanish for `k < h` and whose `T^h` coefficient equals `X.t`.
 - Proves closure properties: `refl`, `add_right`, `mul_right`, `mul` (orders add), `trans` (orders compose as `(h₁+1)(h₂+1)-1`), and compatibility with restriction (`of_restrict_left/right`).
 - Lifts to `Tensor K d` as `Tensor.Degenerates`; proves `Restrict.degenerates` (restriction implies degeneration at order 0) and `Degenerates.asymptoticLe` (degeneration implies asymptotic restriction, via subexponential multiplier `(nh+1)^d`).
+- Proves `tensor_degeneratesOfOrder_natCast_iff`: **border-rank characterization** — `DegeneratesOfOrder ⟦X⟧ r h` iff there exist polynomial vectors `v_{ij}(ε)` whose `ε^k` coefficient vanishes for `k < h` and equals `X.t` at `k = h`. Degeneration analog of `tensor_le_natCast_iff`.
 - Constructs `Tensor.strassenPreorderOfDegenerates`: a `StrassenPreorder` on `Tensor K d` with `le := Degenerates`, and proves `asymptoticClosure_degenerates_eq`: degeneration and restriction have the same asymptotic closure. No remaining `sorry`.
 
 ### `Permutation.lean`
@@ -43,6 +44,14 @@ This subdirectory develops the **tensor-product semiring** used as the primary e
 - Proves `permuteSpaces` respects `TensorObj.Restrict` and direct sums, hence descends to `Tensor.permuteSpaces : Tensor K d → Tensor K d` (a ring homomorphism, with `mul` and `one` still `sorry`).
 - Constructs `AsymptoticSpectrumPoint.perm φ σ`: the permuted spectrum point `φ^σ(x) = φ(permuteSpaces σ x)`, still a spectrum point (monotonicity `sorry`).
 - Key lemma: `TensorObj.permuteSpaces_add_restrict` — reindexing commutes with `inl`/`inr` via `PiTensorProduct.map_reindex`.
+
+### `Schonhage.lean`
+- Proves **Schönhage's direct sum construction**: for `n, m ≥ 2`, the tensor `MM(n,1,m) + MM(1,(n-1)(m-1),1)` has border rank at most `nm+1`.
+- Defines explicit polynomial vectors indexed by `(Fin n × Fin m) ⊕ Unit` with a correction term ensuring T⁰ and T¹ vanish.
+- Main theorem `schonhage_direct_sum`: constructs a `DegeneratesOfOrder` witness of order 2 via `tensor_degeneratesOfOrder_natCast_iff`.
+- Proves the leading T² coefficient decomposes as `liftMap inl (MMObj n 1 m).t + liftMap inr (MMObj 1 k 1).t` by matching each antidiagonal tuple contribution.
+- Derives `matMulExp_lt`: **ω < 51/20 = 2.55** by plugging `n = m = 4` into `schonhage_direct_sum`, applying the asymptotic sum inequality, and a numerical bound `16^{17/20} + 9^{17/20} > 17`.
+- No remaining `sorry` (depends on the upstream Duality black-box via `asymptotic_sum_inequality`).
 
 ### `MatrixMult.lean`
 - Defines `MMObj n m p : TensorObj K 3` and `MM n m p : Tensor K 3`; proves `MM_mul`, `MM_pow`, `MM_le_of_le`, `MM_le_mul`, `one_le_MM`, `MM_ne_zero`.
