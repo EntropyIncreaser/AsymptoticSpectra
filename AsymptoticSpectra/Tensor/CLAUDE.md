@@ -51,14 +51,14 @@ This subdirectory develops the **tensor-product semiring** used as the primary e
 - Main theorem `schonhage_direct_sum`: constructs a `DegeneratesOfOrder` witness of order 2 via `tensor_degeneratesOfOrder_natCast_iff`.
 - Proves the leading T² coefficient decomposes as `liftMap inl (MMObj n 1 m).t + liftMap inr (MMObj 1 k 1).t` by matching each antidiagonal tuple contribution.
 - Derives `matMulExp_lt`: **ω < 51/20 = 2.55** by plugging `n = m = 4` into `schonhage_direct_sum`, applying the asymptotic sum inequality, and a numerical bound `16^{17/20} + 9^{17/20} > 17`.
-- No remaining `sorry` (depends on the upstream Duality black-box via `asymptotic_sum_inequality`).
+- No remaining `sorry`.
 
 ### `MatrixMult.lean`
 - Defines `MMObj n m p : TensorObj K 3` and `MM n m p : Tensor K 3`; proves `MM_mul`, `MM_pow`, `MM_le_of_le`, `MM_le_mul`, `one_le_MM`, `MM_ne_zero`.
 - Defines `θ₁, θ₂, θ₃ : AsymptoticSpectrumPoint → ℝ` as `log φ(MM 2 1 1) / log 2` etc.; proves `θᵢ ∈ [0,1]` (under `RefinesCanonical P`) and `MM_eval`: `φ(MM n m p) = n^θ₁ · m^θ₂ · p^θ₃`.
 - Defines `specMM : Set (ℝ × ℝ × ℝ)` as the image of the spectrum under `φ ↦ (θ₁, θ₂, θ₃)`; proves `specMM ⊆ [0,1]³` and `specMM` is compact. Defines `cyclicPerm`/`transpPerm` and proves `MM_permuteSpaces_cyclic/transp`, `θ_perm_cyclic/transp`, `specMM_perm`.
-- Defines `matMulExp : ℝ` intrinsically as `iInf n, log (rank P_can (MM n n n)) / log n`; proves the canonical normalization `matMulExp_eq_log_AR_222`: `ω = log_2 AR(MM 2 2 2)`, and the duality characterization `matMulExp_eq_sup_specMM`: `ω = ⨆_φ (θ₁+θ₂+θ₃)(φ)` (modulo the upstream Duality `sorry`).
-- Proves `jensen_S3_convex` (3-cyclic Jensen averaging) and the **asymptotic sum inequality** `asymptotic_sum_inequality`: `AR(⊕ᵢ MM(nᵢ,mᵢ,pᵢ)) ≤ r` implies `∑ᵢ (nᵢ·mᵢ·pᵢ)^{ω/3} ≤ r`. No remaining `sorry` in this file (only the Duality black-box is upstream).
+- Defines `matMulExp : ℝ` intrinsically as `iInf n, log (rank P_can (MM n n n)) / log n`; proves the canonical normalization `matMulExp_eq_log_AR_222`: `ω = log_2 AR(MM 2 2 2)`, and the duality characterization `matMulExp_eq_sup_specMM`: `ω = ⨆_φ (θ₁+θ₂+θ₃)(φ)`.
+- Proves `jensen_S3_convex` (3-cyclic Jensen averaging) and the **asymptotic sum inequality** `asymptotic_sum_inequality`: `AR(⊕ᵢ MM(nᵢ,mᵢ,pᵢ)) ≤ r` implies `∑ᵢ (nᵢ·mᵢ·pᵢ)^{ω/3} ≤ r`. No remaining `sorry` in this file.
 
 ---
 
