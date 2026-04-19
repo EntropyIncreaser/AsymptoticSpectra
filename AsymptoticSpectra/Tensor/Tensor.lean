@@ -673,8 +673,7 @@ private theorem add_assoc_bwd_aux (X Y Z : TensorObj K d)
           (liftMap (fun i => LinearMap.inr K (Y.V i) (Z.V i)) t) from h
     intro t; induction t using PiTensorProduct.induction_on with
     | smul_tprod c v =>
-        simp only [liftMap, PiTensorProduct.lift.tprod, LinearEquiv.prodAssoc, map_smul,
-                   LinearMap.inr_apply]; rfl
+        simp only [liftMap, PiTensorProduct.lift.tprod, LinearEquiv.prodAssoc, map_smul]; rfl
     | add t1 t2 ih1 ih2 => simp only [map_add, ih1, ih2]
   have step1' : (liftMap (fun i => (LinearEquiv.prodAssoc K (X.V i) (Y.V i) (Z.V i)).toLinearMap))
       (liftMap (fun i => LinearMap.inl K ((X + Y).V i) (Z.V i))

@@ -452,7 +452,7 @@ private lemma schonhage_t2 (hn : 2 ≤ n) (hm : 2 ≤ m) :
       have : m1 (2 : Fin 3) = 0 ∨ m1 (2 : Fin 3) = 2 := by omega
       rcases this with h | h
       · exact hne1 (funext fun i => by fin_cases i <;> simp_all [d110] <;> omega)
-      · exact hne2 (funext fun i => by fin_cases i <;> simp_all [d002] <;> omega)
+      · exact hne2 (funext fun i => by fin_cases i <;> simp_all [d002])
     rcases key with h0 | h1 | h2
     · exact (PiTensorProduct.tprod K).map_coord_zero (0 : Fin 3) (polyVecMain_mode0_eval_ge2 x.1 x.2 h0)
     · exact (PiTensorProduct.tprod K).map_coord_zero (1 : Fin 3) (polyVecMain_mode1_eval_ge2 x.1 x.2 h1)

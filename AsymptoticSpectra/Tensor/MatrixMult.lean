@@ -579,7 +579,7 @@ private theorem mono_mult_eq_rpow (f : ℕ → ℝ)
     (h_one : f 1 = 1)
     (h_mono : ∀ a b : ℕ, 1 ≤ a → a ≤ b → f a ≤ f b)
     (h_one_le : ∀ a : ℕ, 1 ≤ a → 1 ≤ f a)
-    (h_le_n : ∀ a : ℕ, 1 ≤ a → f a ≤ a) :
+    (_h_le_n : ∀ a : ℕ, 1 ≤ a → f a ≤ a) :
     ∀ n : ℕ, 1 ≤ n → f n = (n : ℝ) ^ (Real.log (f 2) / Real.log 2) := by
   set α := Real.log (f 2) / Real.log 2 with hα_def
   have hlog2_pos : 0 < Real.log 2 := Real.log_pos (by norm_num)

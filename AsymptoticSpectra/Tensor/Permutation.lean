@@ -38,8 +38,7 @@ theorem reindex_interchange {ι : Type*} [Fintype ι] [DecidableEq ι] {ι₂ : 
     | smul_tprod c₂ v₂ =>
       simp [map_smul, TensorObj.interchange_tprod_K, PiTensorProduct.reindex_tprod]
     | add x y ihx ihy =>
-      simp only [map_add, map_smul, LinearMap.smul_apply, LinearMap.map_add,
-                 LinearMap.add_apply]
+      simp only [map_add, map_smul, LinearMap.smul_apply]
       -- ihx and ihy have c₁ • tprod v₁, but after simp the smul is distributed
       -- Use map linearity: simp pulls c₁ • outside, leaving tprod v₁
       -- The IH with c₁ • : reindex (interchange (c₁ • tprod v₁) x) = interchange (reindex (c₁ • tprod v₁)) (reindex x)
@@ -55,7 +54,7 @@ theorem reindex_interchange {ι : Type*} [Fintype ι] [DecidableEq ι] {ι₂ : 
       simp only [map_smul, LinearMap.smul_apply] at hx hy
       rw [hx, hy]
   | add x y ihx ihy =>
-    simp only [map_add, LinearMap.add_apply, LinearMap.map_add, ihx, ihy]
+    simp only [map_add, LinearMap.add_apply, ihx, ihy]
 
 namespace TensorObj
 
@@ -146,7 +145,7 @@ variable {K : Type u} [Field K] {d : ℕ} [Fact (1 < d)]
 noncomputable def permuteSpaces (σ : Equiv.Perm (Fin d)) (x : Tensor K d) : Tensor K d :=
   Quotient.liftOn x
     (fun X => toTensor (X.permuteSpaces σ))
-    (fun X Y h => Quotient.sound (TensorObj.permuteSpaces_isomorphic σ h))
+    (fun _ _ h => Quotient.sound (TensorObj.permuteSpaces_isomorphic σ h))
 
 @[simp]
 theorem permuteSpaces_toTensor (σ : Equiv.Perm (Fin d)) (X : TensorObj K d) :

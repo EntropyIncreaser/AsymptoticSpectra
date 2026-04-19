@@ -200,8 +200,8 @@ theorem tmulEquivDep_liftEquiv_comm {ι₁ ι₂ : Type*} [Fintype ι₁] [Finty
   | add x y ihx ihy =>
     simp only [map_add, ihx, ihy]
 
+omit [Fact (1 < d)] in
 /-- Naturality of `splitTensorEquiv`: it commutes with `liftEquiv`. -/
-
 theorem splitTensorEquiv_naturality (σ : Split (Fin d)) {V W : Fin d → Type v}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
     [∀ i, AddCommGroup (W i)] [∀ i, Module K (W i)]
@@ -1859,6 +1859,7 @@ theorem tensorFourRearrange_tmul (A B C D : Type*)
     TensorProduct.comm_tmul]
 variable {V : Fin d → Type v} [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
 
+omit [Fact (1 < d)] in
 /-- Helper lemma: splitTensorEquiv applied to a pure tensor product. -/
 private theorem splitTensorEquiv_tprod (v : (i : Fin d) → V i) :
     splitTensorEquiv σ (tprod K v) =
@@ -1870,6 +1871,7 @@ private theorem splitTensorEquiv_tprod (v : (i : Fin d) → V i) :
   congr
 
 
+omit [Fact (1 < d)] in
 /-- Split tensor equiv commutes with interchange via distributivity.
 
 This shows that splitting the product tensor `(X * Y).t = interchange X.t Y.t`
@@ -2062,7 +2064,7 @@ theorem flatteningRank_mul
       -- where eA = piTensorDistrib.symm (on σ.S), eB = piTensorDistrib.symm (on Sc σ)
       -- and t = tensorFourRearrange AS BS AT BT (tX ⊗ₜ tY)
       -- Note: (X * Y).V i = X.V i ⊗ Y.V i by definition of TensorObj.mul
-      simp only [HMul.hMul, Mul.mul, TensorObj.mul, LinearMap.comp_apply]
+      simp only [HMul.hMul, Mul.mul, TensorObj.mul]
       convert tensorToDualHom_naturality K piTensorDistrib.symm piTensorDistrib.symm
         (tensorFourRearrange AS BS AT BT (tX ⊗ₜ[K] tY)) phi using 2
 
@@ -2213,9 +2215,9 @@ theorem flatteningRank_one :
   unfold AsymptoticSpectra.flatteningRank flatteningMap
   have h_split : splitTensorEquiv σ TensorObj.oneObj.t =
       tprod K (fun (_ : σ.S) => ULift.up (1 : K)) ⊗ₜ[K] tprod K (fun (_ : Sc σ) => ULift.up (1 : K)) := by
-    have := @splitTensorEquiv_tprod K _ d _ σ (fun _ => ULift K)
+    have := @splitTensorEquiv_tprod K _ d σ (fun _ => ULift K)
       (fun _ => inferInstance) (fun _ => inferInstance) (fun _ => ULift.up 1)
-    convert this using 2 <;> rfl
+    convert this using 2
   rw [h_split]
   let vS := tprod K (fun (_ : σ.S) => ULift.up (1 : K))
   let vSc := tprod K (fun (_ : Sc σ) => ULift.up (1 : K))

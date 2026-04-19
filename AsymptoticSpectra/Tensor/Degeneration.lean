@@ -184,6 +184,7 @@ private theorem liftMap_id_fun {Z : TensorObj K d} :
   apply MultilinearMap.ext; intro v
   simp [liftMap]
 
+omit [Fact (1 < d)] in
 /-- Helper: if a family of linear maps has a zero entry at some mode `i₀`,
 then `liftMap` of that family is the zero map. -/
 private theorem liftMap_eq_zero_of_zero_slot {V W : Fin d → Type*}
@@ -383,6 +384,7 @@ theorem DegeneratesOfOrder.mul_right {X Y Z : TensorObj K d} {h : ℕ}
 
 /-! ### Helpers for `tensor_coeff_expand` -/
 
+omit [Fact (1 < d)] in
 private theorem liftMap_sum_piFinset
     {V W : Fin d → Type*}
     [∀ i, AddCommGroup (V i)] [∀ i, Module K (V i)]
