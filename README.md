@@ -63,6 +63,29 @@ for the full file-by-file overview.
 
 The project is `sorry`-free.
 
+## Statistics
+
+Approximate counts (lines include blank lines and comments; "defs" covers
+`def`/`abbrev`/`instance`, "thms" covers `theorem`/`lemma`):
+
+| File | Lines | Defs | Thms |
+|---|---:|---:|---:|
+| `Structures.lean` | 116 | 4 | 6 |
+| `Submultiplicative.lean` | 78 | 2 | 1 |
+| `AsymptoticClosure.lean` | 1063 | 8 | 28 |
+| `Rank.lean` | 650 | 11 | 44 |
+| `Spectrum.lean` | 392 | 19 | 12 |
+| `Duality.lean` | 366 | 1 | 8 |
+| `Tensor/Tensor.lean` | 1187 | 34 | 50 |
+| `Tensor/BaseChange.lean` | 602 | 11 | 30 |
+| `Tensor/Flattening.lean` | 2268 | 21 | 47 |
+| `Tensor/Restriction.lean` | 584 | 5 | 12 |
+| `Tensor/Degeneration.lean` | 1240 | 11 | 53 |
+| `Tensor/Permutation.lean` | 285 | 3 | 11 |
+| `Tensor/Schonhage.lean` | 654 | 13 | 19 |
+| `Tensor/MatrixMult.lean` | 1956 | 18 | 45 |
+| **Total** | **~11 400** | **161** | **366** |
+
 ## Building
 
 Compile the project:
