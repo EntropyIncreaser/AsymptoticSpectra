@@ -66,25 +66,27 @@ The project is `sorry`-free.
 ## Statistics
 
 Approximate counts (lines include blank lines and comments; "defs" covers
-`def`/`abbrev`/`instance`, "thms" covers `theorem`/`lemma`):
+`def`/`abbrev`/`instance`, "thms" covers `theorem`/`lemma`; the rightmost
+column is the average number of source lines per theorem in that file —
+a rough proxy for "how hard, on average, the proofs are"):
 
-| File | Lines | Defs | Thms |
-|---|---:|---:|---:|
-| `Structures.lean` | 116 | 4 | 6 |
-| `Submultiplicative.lean` | 78 | 2 | 1 |
-| `AsymptoticClosure.lean` | 1063 | 8 | 28 |
-| `Rank.lean` | 650 | 11 | 44 |
-| `Spectrum.lean` | 392 | 19 | 12 |
-| `Duality.lean` | 366 | 1 | 8 |
-| `Tensor/Tensor.lean` | 1187 | 34 | 50 |
-| `Tensor/BaseChange.lean` | 602 | 11 | 30 |
-| `Tensor/Flattening.lean` | 2268 | 21 | 47 |
-| `Tensor/Restriction.lean` | 584 | 5 | 12 |
-| `Tensor/Degeneration.lean` | 1240 | 11 | 53 |
-| `Tensor/Permutation.lean` | 285 | 3 | 11 |
-| `Tensor/Schonhage.lean` | 654 | 13 | 19 |
-| `Tensor/MatrixMult.lean` | 1956 | 18 | 45 |
-| **Total** | **~11 400** | **161** | **366** |
+| File | Lines | Defs | Thms | Lines / Thm |
+|---|---:|---:|---:|---:|
+| `Structures.lean` | 116 | 4 | 6 | 19.3 |
+| `Submultiplicative.lean` | 78 | 2 | 1 | 78.0 |
+| `AsymptoticClosure.lean` | 1063 | 8 | 28 | 38.0 |
+| `Rank.lean` | 650 | 11 | 44 | 14.8 |
+| `Spectrum.lean` | 392 | 19 | 12 | 32.7 |
+| `Duality.lean` | 366 | 1 | 8 | 45.8 |
+| `Tensor/Tensor.lean` | 1187 | 34 | 50 | 23.7 |
+| `Tensor/BaseChange.lean` | 602 | 11 | 30 | 20.1 |
+| `Tensor/Flattening.lean` | 2268 | 21 | 47 | 48.3 |
+| `Tensor/Restriction.lean` | 584 | 5 | 12 | 48.7 |
+| `Tensor/Degeneration.lean` | 1240 | 11 | 53 | 23.4 |
+| `Tensor/Permutation.lean` | 285 | 3 | 11 | 25.9 |
+| `Tensor/Schonhage.lean` | 654 | 13 | 19 | 34.4 |
+| `Tensor/MatrixMult.lean` | 1956 | 18 | 45 | 43.5 |
+| **Total** | **~11 400** | **161** | **366** | **31.1** |
 
 ### Mathematical-domain breakdown
 
@@ -112,31 +114,32 @@ The categories are:
 Counts (line counts measure **declaration spans only**, excluding imports,
 top-level docstrings, namespace headers, and other inter-declaration filler):
 
-| Category | # decls | # thms | # defs | Lines | % of decl-LOC |
+| Category | # decls | # thms | # defs | Lines | % of decl-LOC | Lines / Thm |
+|---|---:|---:|---:|---:|---:|---:|
+| A — Analysis | 134 | 103 | 31 | 3 285 | 30.9% | 31.9 |
+| B — Semiring algebra | 52 | 31 | 21 | 451 | 4.2% | 14.5 |
+| C — Multilinear / tensors | 341 | 232 | 109 | 6 900 | 64.9% | 29.7 |
+| **Total** | **527** | **366** | **161** | **10 636** | **100.0%** | **29.1** |
+
+Per-file split, sorted by total declaration-LOC (`A B C` columns are LOC; the
+final column is the file's total declaration-LOC divided by its theorem count):
+
+| File | A | B | C | Total | Lines / Thm |
 |---|---:|---:|---:|---:|---:|
-| A — Analysis | 134 | 103 | 31 | 3 285 | 30.9% |
-| B — Semiring algebra | 52 | 31 | 21 | 451 | 4.2% |
-| C — Multilinear / tensors | 341 | 232 | 109 | 6 900 | 64.9% |
-| **Total** | **527** | **366** | **161** | **10 636** | **100.0%** |
-
-Per-file split, sorted by total declaration-LOC (`A B C` columns are LOC):
-
-| File | A | B | C | Total |
-|---|---:|---:|---:|---:|
-| [`Tensor/Flattening.lean`](AsymptoticSpectra/Tensor/Flattening.lean) | 0 | 0 | 2 174 | 2 174 |
-| [`Tensor/MatrixMult.lean`](AsymptoticSpectra/Tensor/MatrixMult.lean) | 1 254 | 0 | 621 | 1 875 |
-| [`Tensor/Degeneration.lean`](AsymptoticSpectra/Tensor/Degeneration.lean) | 0 | 0 | 1 137 | 1 137 |
-| [`Tensor/Tensor.lean`](AsymptoticSpectra/Tensor/Tensor.lean) | 0 | 0 | 1 070 | 1 070 |
-| [`AsymptoticClosure.lean`](AsymptoticSpectra/AsymptoticClosure.lean) | 1 001 | 0 | 0 | 1 001 |
-| [`Tensor/Schonhage.lean`](AsymptoticSpectra/Tensor/Schonhage.lean) | 70 | 0 | 532 | 602 |
-| [`Rank.lean`](AsymptoticSpectra/Rank.lean) | 389 | 186 | 0 | 575 |
-| [`Tensor/BaseChange.lean`](AsymptoticSpectra/Tensor/BaseChange.lean) | 0 | 0 | 567 | 567 |
-| [`Tensor/Restriction.lean`](AsymptoticSpectra/Tensor/Restriction.lean) | 0 | 0 | 551 | 551 |
-| [`Duality.lean`](AsymptoticSpectra/Duality.lean) | 344 | 0 | 0 | 344 |
-| [`Spectrum.lean`](AsymptoticSpectra/Spectrum.lean) | 159 | 179 | 0 | 338 |
-| [`Tensor/Permutation.lean`](AsymptoticSpectra/Tensor/Permutation.lean) | 0 | 0 | 248 | 248 |
-| [`Structures.lean`](AsymptoticSpectra/Structures.lean) | 0 | 86 | 0 | 86 |
-| [`Submultiplicative.lean`](AsymptoticSpectra/Submultiplicative.lean) | 68 | 0 | 0 | 68 |
+| [`Tensor/Flattening.lean`](AsymptoticSpectra/Tensor/Flattening.lean) | 0 | 0 | 2 174 | 2 174 | 46.3 |
+| [`Tensor/MatrixMult.lean`](AsymptoticSpectra/Tensor/MatrixMult.lean) | 1 254 | 0 | 621 | 1 875 | 41.7 |
+| [`Tensor/Degeneration.lean`](AsymptoticSpectra/Tensor/Degeneration.lean) | 0 | 0 | 1 137 | 1 137 | 21.5 |
+| [`Tensor/Tensor.lean`](AsymptoticSpectra/Tensor/Tensor.lean) | 0 | 0 | 1 070 | 1 070 | 21.4 |
+| [`AsymptoticClosure.lean`](AsymptoticSpectra/AsymptoticClosure.lean) | 1 001 | 0 | 0 | 1 001 | 35.8 |
+| [`Tensor/Schonhage.lean`](AsymptoticSpectra/Tensor/Schonhage.lean) | 70 | 0 | 532 | 602 | 31.7 |
+| [`Rank.lean`](AsymptoticSpectra/Rank.lean) | 389 | 186 | 0 | 575 | 13.1 |
+| [`Tensor/BaseChange.lean`](AsymptoticSpectra/Tensor/BaseChange.lean) | 0 | 0 | 567 | 567 | 18.9 |
+| [`Tensor/Restriction.lean`](AsymptoticSpectra/Tensor/Restriction.lean) | 0 | 0 | 551 | 551 | 45.9 |
+| [`Duality.lean`](AsymptoticSpectra/Duality.lean) | 344 | 0 | 0 | 344 | 43.0 |
+| [`Spectrum.lean`](AsymptoticSpectra/Spectrum.lean) | 159 | 179 | 0 | 338 | 28.2 |
+| [`Tensor/Permutation.lean`](AsymptoticSpectra/Tensor/Permutation.lean) | 0 | 0 | 248 | 248 | 22.5 |
+| [`Structures.lean`](AsymptoticSpectra/Structures.lean) | 0 | 86 | 0 | 86 | 14.3 |
+| [`Submultiplicative.lean`](AsymptoticSpectra/Submultiplicative.lean) | 68 | 0 | 0 | 68 | 68.0 |
 
 The roughly 65/30/5 split reflects the project's flavor: more than half of the
 work is tensor multilinear algebra (`Tensor/*`); about a third is real-valued
