@@ -86,6 +86,67 @@ Approximate counts (lines include blank lines and comments; "defs" covers
 | `Tensor/MatrixMult.lean` | 1956 | 18 | 45 |
 | **Total** | **~11 400** | **161** | **366** |
 
+### Mathematical-domain breakdown
+
+Each declaration is assigned to **one** of three categories. Source of truth:
+[`classification.csv`](classification.csv) (one row per declaration); regenerate
+with `bash scripts/classify_decls.sh | python3 scripts/apply_classification.py > classification.csv`
+and aggregate with `bash scripts/totals.sh classification.csv`.
+
+The categories are:
+
+- **A — Analysis.** Real limits, `Tendsto`, `liminf`/`limsup`, Fekete-style
+  submultiplicativity, convexity, `rpow`, ceilings, the entire asymptotic family
+  (`AsymptoticLe`, `asymptoticClosure`, `asymptotic_rank`, `rho`, `kappa`),
+  the Duality theorem, the matMulExp duality characterization, Jensen, etc.
+- **B — Semiring abstract algebra.** The algebraic core of `SemiringPreorder` /
+  `StrassenPreorder` (compatibility axioms, `CharZero`, `NoZeroDivisors`,
+  totality), integer `rank`/`subrank` and their algebraic inequalities,
+  `AsymptoticSpectrumPoint` as a ring hom, the spectrum-point ↔ maximal-extension
+  bijection, Zorn-based total extension construction, `rho_toRingHom`.
+- **C — Multilinear algebra / tensors.** Everything tensor-specific:
+  `TensorObj`, `TensorIso`, the semiring on `Tensor K d`, base change,
+  flattening rank, restriction, degeneration, permutation, Schönhage's
+  polynomial-family construction, `MMObj`/`MM` and their algebraic identities.
+
+Counts (line counts measure **declaration spans only**, excluding imports,
+top-level docstrings, namespace headers, and other inter-declaration filler):
+
+| Category | # decls | # thms | # defs | Lines | % of decl-LOC |
+|---|---:|---:|---:|---:|---:|
+| A — Analysis | 134 | 103 | 31 | 3 285 | 30.9% |
+| B — Semiring algebra | 52 | 31 | 21 | 451 | 4.2% |
+| C — Multilinear / tensors | 341 | 232 | 109 | 6 900 | 64.9% |
+| **Total** | **527** | **366** | **161** | **10 636** | **100.0%** |
+
+Per-file split, sorted by total declaration-LOC (`A B C` columns are LOC):
+
+| File | A | B | C | Total |
+|---|---:|---:|---:|---:|
+| [`Tensor/Flattening.lean`](AsymptoticSpectra/Tensor/Flattening.lean) | 0 | 0 | 2 174 | 2 174 |
+| [`Tensor/MatrixMult.lean`](AsymptoticSpectra/Tensor/MatrixMult.lean) | 1 254 | 0 | 621 | 1 875 |
+| [`Tensor/Degeneration.lean`](AsymptoticSpectra/Tensor/Degeneration.lean) | 0 | 0 | 1 137 | 1 137 |
+| [`Tensor/Tensor.lean`](AsymptoticSpectra/Tensor/Tensor.lean) | 0 | 0 | 1 070 | 1 070 |
+| [`AsymptoticClosure.lean`](AsymptoticSpectra/AsymptoticClosure.lean) | 1 001 | 0 | 0 | 1 001 |
+| [`Tensor/Schonhage.lean`](AsymptoticSpectra/Tensor/Schonhage.lean) | 70 | 0 | 532 | 602 |
+| [`Rank.lean`](AsymptoticSpectra/Rank.lean) | 389 | 186 | 0 | 575 |
+| [`Tensor/BaseChange.lean`](AsymptoticSpectra/Tensor/BaseChange.lean) | 0 | 0 | 567 | 567 |
+| [`Tensor/Restriction.lean`](AsymptoticSpectra/Tensor/Restriction.lean) | 0 | 0 | 551 | 551 |
+| [`Duality.lean`](AsymptoticSpectra/Duality.lean) | 344 | 0 | 0 | 344 |
+| [`Spectrum.lean`](AsymptoticSpectra/Spectrum.lean) | 159 | 179 | 0 | 338 |
+| [`Tensor/Permutation.lean`](AsymptoticSpectra/Tensor/Permutation.lean) | 0 | 0 | 248 | 248 |
+| [`Structures.lean`](AsymptoticSpectra/Structures.lean) | 0 | 86 | 0 | 86 |
+| [`Submultiplicative.lean`](AsymptoticSpectra/Submultiplicative.lean) | 68 | 0 | 0 | 68 |
+
+The roughly 65/30/5 split reflects the project's flavor: more than half of the
+work is tensor multilinear algebra (`Tensor/*`); about a third is real-valued
+analysis (the asymptotic-rank machinery, the duality theorem, and the
+matrix-multiplication exponent); and a small but load-bearing core (`451`
+lines) is pure abstract-algebraic preorder theory. Every theorem in
+[`Duality.lean`](AsymptoticSpectra/Duality.lean) is classified as analysis
+because the duality proof itself goes through real limits and `rpow` even
+though its statement is structural.
+
 ## Building
 
 Compile the project:
@@ -99,3 +160,29 @@ Build documentation (requires `doc-gen4`):
 ```bash
 lake build AsymptoticSpectra:docs
 ```
+
+## Dependency graphs ([lean-graph](https://github.com/patrik-cihal/lean-graph))
+
+The repo ships a preconfigured
+[`DependencyExtractor.lean`](DependencyExtractor.lean) that imports
+`AsymptoticSpectra` and exposes the main theorems as graph roots. To render
+the dependency graph of any theorem:
+
+1. Ensure the project is built: `lake build`.
+2. Open [`DependencyExtractor.lean`](DependencyExtractor.lean) and **uncomment**
+   one of the `#eval` lines at the bottom (templates are provided for
+   `asymptotic_rank_eq_max_spectrum`, `matMulExp_lt`, `schonhage_direct_sum`,
+   etc.).
+3. Run the extractor to emit a JSON file:
+   ```bash
+   lake env lean DependencyExtractor.lean
+   ```
+4. Drag the resulting `<theorem-name>.json` into the hosted viewer at
+   [patrik-cihal.github.io/lean-graph](https://patrik-cihal.github.io/lean-graph/),
+   or install and run the CLI locally:
+   ```bash
+   cargo install --git https://github.com/patrik-cihal/lean-graph
+   lean-graph
+   ```
+
+The `*.json` outputs at the project root are git-ignored.
